@@ -8,7 +8,7 @@ export function getLabelLookupUrlTemplate(): string | undefined {
   if (custom) return custom
   const base = import.meta.env.VITE_SYNC_API_BASE?.trim().replace(/\/$/, '')
   if (base) return `${base}/api/labels/{{id}}`
-  return undefined
+  return '/api/labels/{{id}}'
 }
 
 export function getSyncApiBase(): string | undefined {

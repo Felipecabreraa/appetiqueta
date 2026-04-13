@@ -1,0 +1,28 @@
+# Blueprint de Render: crea/actualiza el servicio al conectar el repo.
+# Cada push a la rama indicada dispara un deploy (comportamiento por defecto en Render).
+# Tras el primer deploy, completa en el dashboard las variables con sync: false.
+
+services:
+  - type: web
+    name: appetiqueta
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.12.0"
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      # Opcional: si la defines, define también VITE_SYNC_API_KEY en el mismo servicio y redeploy.
+      - key: SYNC_API_KEY
+        sync: false

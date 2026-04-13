@@ -184,7 +184,8 @@ function App() {
             <p>
               Los datos viven en <strong>este navegador en este equipo</strong>. Para el celular:
               ejecute <code>npm run server</code> (API Node + MySQL con las mismas variables{' '}
-              <code>MYSQL_*</code> del <code>.env</code>) y en el front defina{' '}
+              <code>MYSQL_*</code> del <code>.env</code>). En desarrollo, Vite enruta{' '}
+              <code>/api</code> al puerto 3001; solo si el API está en otro host use{' '}
               <code>VITE_SYNC_API_BASE=http://IP:3001</code>. Al generar etiquetas se guardan en la
               BD y al escanear el QR el móvil las descarga. Opcional: <code>VITE_LABEL_LOOKUP_URL</code>{' '}
               con <code>{'{{id}}'}</code> si usa otro backend (p. ej. PHP).

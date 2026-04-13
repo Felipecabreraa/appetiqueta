@@ -1,22 +1,28 @@
 /**
  * API mínima para sincronizar etiquetas con MySQL (mismo esquema que database/schema.sql).
+ * En producción (Render, etc.) sirve también el front estático desde dist/.
  *
  * Variables en .env (raíz del proyecto, no expuestas al front):
  *   MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
- *   SYNC_API_PORT=3001  (opcional)
+ *   PORT o SYNC_API_PORT  (Render inyecta PORT)
  *   SYNC_API_KEY=...    (opcional; si existe, POST /api/labels/batch exige cabecera X-Sync-Key)
  *
- * Arranque: npm run server
- * Front: VITE_SYNC_API_BASE=http://IP_DE_ESTA_MAQUINA:3001
+ * Arranque local API: npm run server
+ * Producción: npm run build && npm start
+ * Front mismo origen: no hace falta VITE_SYNC_API_BASE; en dev Vite hace proxy de /api → :3001
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') })
+const fs = require('fs')
+const path = require('path')
+
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 
 const express = require('express')
 const cors = require('cors')
 const mysql = require('mysql2/promise')
 
-const PORT = Number(process.env.SYNC_API_PORT || 3001)
+const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
+const distPath = path.join(__dirname, '..', 'dist')
 const SYNC_API_KEY = (process.env.SYNC_API_KEY || '').trim()
 
 async function createPool() {
@@ -163,8 +169,21 @@ async function main() {
     }
   })
 
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath))
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next()
+      res.sendFile(path.join(distPath, 'index.html'), (err) => {
+        if (err) next(err)
+      })
+    })
+  }
+
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[sync-api] http://0.0.0.0:${PORT}  (MySQL: ${process.env.MYSQL_DATABASE})`)
+    const mode = fs.existsSync(distPath) ? 'api+static' : 'api'
+    console.log(
+      `[sync-api] ${mode} http://0.0.0.0:${PORT}  (MySQL: ${process.env.MYSQL_DATABASE})`,
+    )
   })
 }
 

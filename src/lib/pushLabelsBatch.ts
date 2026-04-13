@@ -8,8 +8,9 @@ export type PushResult = { ok: true } | { ok: false; message: string }
 export async function pushLabelsBatchToServer(
   records: LabelRecord[],
 ): Promise<PushResult> {
-  const base = import.meta.env.VITE_SYNC_API_BASE?.trim().replace(/\/$/, '')
-  if (!base || records.length === 0) return { ok: true }
+  if (records.length === 0) return { ok: true }
+  const raw = import.meta.env.VITE_SYNC_API_BASE?.trim()
+  const base = raw ? raw.replace(/\/$/, '') : ''
 
   const key = import.meta.env.VITE_SYNC_API_KEY?.trim()
   const headers: Record<string, string> = {
