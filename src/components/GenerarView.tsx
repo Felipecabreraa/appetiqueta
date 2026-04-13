@@ -67,11 +67,9 @@ export function GenerarView({
   const primera = generatedRecords[0]
   const esLote = generatedRecords.length > 1
 
-  const hasPreview = generatedRecords.length > 0
-
   return (
     <>
-      <div className="generar-stack no-print">
+      <div className="generar-stack generar-page no-print">
         <section className="card workflow-card" aria-labelledby="workflow-heading">
           <p className="page-eyebrow">Flujo de trabajo</p>
           <h2 id="workflow-heading" className="page-heading">
@@ -79,7 +77,7 @@ export function GenerarView({
           </h2>
           <p className="page-lead">
             Complete el lote en el formulario modal, confirme la cantidad, genere e imprima o exporte
-            a PDF. En campo use la pestaña <strong>Registrar lecturas</strong>.
+            a PDF. En campo use el módulo <strong>Registrar lecturas</strong>.
           </p>
           <ol className="flow-stepper" aria-label="Pasos del proceso">
             <li>
@@ -106,15 +104,13 @@ export function GenerarView({
               </span>
               <span className="flow-stepper-body">
                 <strong>Imprimir / PDF</strong>
-                <span className="flow-stepper-desc">Luego registre JC y acopio en la otra pestaña.</span>
+                <span className="flow-stepper-desc">Luego registre JC y acopio en Registrar lecturas.</span>
               </span>
             </li>
           </ol>
         </section>
 
-        <div
-          className={`layout-workbench${hasPreview ? '' : ' layout-workbench--awaiting'}`}
-        >
+        <div className="layout-workbench">
         <section className="card lote-setup-card" aria-labelledby="lote-setup-title">
           <div className="card-head card-head--with-badge">
             <div className="card-head-titles">

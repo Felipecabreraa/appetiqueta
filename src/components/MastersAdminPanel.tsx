@@ -100,14 +100,42 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
     )
   }
 
+  const jump = (id: string) => () => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
-    <section className="card">
+    <section className="card masters-admin-card">
       <h2>Mantenimiento maestro interno</h2>
       <p className="sub">Gestione temporadas, catálogos y relaciones operativas sin tocar código.</p>
       {error && <p className="alert error">{error}</p>}
       {ok && <p className="alert success">{ok}</p>}
 
-      <h3>Temporadas</h3>
+      <nav className="masters-jump-nav no-print" aria-label="Ir a sección del mantenimiento">
+        <span className="masters-jump-nav-label">Ir a</span>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-temporadas')}>
+          Temporadas
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-empresas')}>
+          Empresas
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-especies')}>
+          Especies
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-csg')}>
+          CSG
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-variedades')}>
+          Variedades
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-relaciones')}>
+          Relaciones
+        </button>
+      </nav>
+
+      <h3 id="maestro-temporadas" className="masters-section-title" tabIndex={-1}>
+        Temporadas
+      </h3>
       <div className="form-grid">
         <label>
           Código
@@ -173,7 +201,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         </table>
       </div>
 
-      <h3>Empresas</h3>
+      <h3 id="maestro-empresas" className="masters-section-title" tabIndex={-1}>
+        Empresas
+      </h3>
       <SimpleMasterForm
         busy={busy}
         title="Empresa"
@@ -193,7 +223,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         }}
       />
 
-      <h3>Especies</h3>
+      <h3 id="maestro-especies" className="masters-section-title" tabIndex={-1}>
+        Especies
+      </h3>
       <SimpleMasterForm
         busy={busy}
         title="Especie"
@@ -213,7 +245,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         }}
       />
 
-      <h3>CSG</h3>
+      <h3 id="maestro-csg" className="masters-section-title" tabIndex={-1}>
+        CSG
+      </h3>
       <SimpleMasterForm
         busy={busy}
         title="CSG"
@@ -233,7 +267,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         }}
       />
 
-      <h3>Variedades</h3>
+      <h3 id="maestro-variedades" className="masters-section-title" tabIndex={-1}>
+        Variedades
+      </h3>
       <div className="form-grid">
         <label>
           Código
@@ -290,7 +326,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         </table>
       </div>
 
-      <h3>Relación maestra (temporada + empresa + CC + CSG + especie + variedad)</h3>
+      <h3 id="maestro-relaciones" className="masters-section-title" tabIndex={-1}>
+        Relación maestra (temporada + empresa + CC + CSG + especie + variedad)
+      </h3>
       <div className="form-grid">
         <label>
           Temporada

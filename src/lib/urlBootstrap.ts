@@ -1,10 +1,12 @@
+import type { AppTab } from '../appTabs'
+
 export interface TrackingSeed {
   code: string
   nonce: number
 }
 
 export function readTrackingFromUrl(): {
-  tab: 'generar' | 'trazabilidad'
+  tab: AppTab
   seed: TrackingSeed | null
   /** true cuando la URL traía ?e= — interfaz cerrada solo para escaneo en terreno */
   operational: boolean

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AppTab } from './appTabs'
-import { AppHeader } from './components/AppHeader'
+import type { AppTab, MaestrosSubTab } from './appTabs'
+import { PAGE_META } from './appNavigation'
+import { AdminTopBar } from './components/AdminTopBar'
+import { AppShell } from './components/AppShell'
+import { AppSidebar } from './components/AppSidebar'
+import { DashboardView } from './components/DashboardView'
 import { GenerarView } from './components/GenerarView'
+import { MastersWorkspace } from './components/MastersWorkspace'
+import { OperatorShell } from './components/OperatorShell'
+import { PageHeader } from './components/PageHeader'
 import { isLabelFormComplete, defaultFormValues, type LabelFormValues } from './components/labelFormValues'
 import { LabelPreview } from './components/LabelPreview'
 import { TrackingView } from './components/TrackingView'
@@ -17,10 +24,8 @@ import { LoginView } from './components/LoginView'
 import { fetchCurrentUser, login, logout } from './lib/authApi'
 import { getStoredUser } from './lib/session'
 import { fetchCatalog } from './lib/masterDataApi'
-import { MasterDataView } from './components/MasterDataView'
 import { UsersAdminView } from './components/UsersAdminView'
 import { OperatorPortal } from './components/OperatorPortal'
-import { MastersAdminPanel } from './components/MastersAdminPanel'
 import './App.css'
 
 export type Tab = AppTab
@@ -48,8 +53,28 @@ function App() {
   const [trackingSeed, setTrackingSeed] = useState<TrackingSeed | null>(urlBoot.seed)
   const [loteModalOpen, setLoteModalOpen] = useState(false)
   const [syncWarning, setSyncWarning] = useState<string | null>(null)
+  const [navOpen, setNavOpen] = useState(false)
+  const [maestrosSubTab, setMaestrosSubTab] = useState<MaestrosSubTab>('excel')
 
   const canAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+
+  useEffect(() => {
+    if (!navOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navOpen])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 901px)')
+    const onChange = () => {
+      if (mq.matches) setNavOpen(false)
+    }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const loadCatalog = useCallback(async (seasonId?: number | null, companyId?: number | null) => {
     setMastersLoading(true)
@@ -220,7 +245,7 @@ function App() {
                 return
               }
               setUser(result.user)
-              setTab(result.user.role === 'operador' ? 'trazabilidad' : 'generar')
+              setTab(result.user.role === 'operador' ? 'trazabilidad' : 'dashboard')
               if (result.user.role === 'admin' || result.user.role === 'superadmin') {
                 void loadCatalog()
               }
@@ -233,42 +258,80 @@ function App() {
 
   if (user.role === 'operador') {
     return (
-      <div className="app">
-        <AppHeader
-          activeTab="trazabilidad"
-          onNavigate={() => undefined}
-          loteComplete={false}
-          role={user.role}
-          userName={user.fullName}
-          onLogout={() => {
-            void logout().finally(() => setUser(null))
-          }}
-        />
-        <OperatorPortal />
-      </div>
-    )
-  }
-
-  return (
-    <div className="app">
-      <AppHeader
-        activeTab={tab}
-        onNavigate={setTab}
-        loteComplete={formComplete}
-        role={user.role}
+      <OperatorShell
         userName={user.fullName}
         onLogout={() => {
           void logout().finally(() => setUser(null))
         }}
-      />
+      >
+        <OperatorPortal />
+      </OperatorShell>
+    )
+  }
 
-      <main id="contenido-principal" className="app-main">
-        <div
-          id="panel-generar"
-          role="tabpanel"
-          aria-labelledby="tab-generar"
-          hidden={tab !== 'generar'}
-        >
+  const roleLabel = user.role === 'superadmin' ? 'SuperAdmin' : 'Admin'
+
+  return (
+    <div className="app app--admin">
+      <AppShell
+        navOpen={navOpen}
+        onCloseNav={() => setNavOpen(false)}
+        sidebar={
+          <AppSidebar
+            activeTab={tab}
+            onNavigate={setTab}
+            canUsers={user.role === 'superadmin'}
+            onItemActivate={() => setNavOpen(false)}
+          />
+        }
+        topBar={
+          <AdminTopBar
+            activeTab={tab}
+            navOpen={navOpen}
+            onOpenNav={() => setNavOpen(true)}
+            loteComplete={formComplete}
+            showLoteStatus={tab === 'generar'}
+            userName={user.fullName}
+            roleLabel={roleLabel}
+            onLogout={() => {
+              void logout().finally(() => setUser(null))
+            }}
+          />
+        }
+      >
+        <main id="contenido-principal" className="app-main">
+          {tab !== 'generar' ? (
+            <PageHeader title={PAGE_META[tab].title} subtitle={PAGE_META[tab].subtitle} />
+          ) : null}
+
+          {tab === 'trazabilidad' ? (
+            <details className="page-help-fold no-print">
+              <summary>Uso en terreno y registro manual</summary>
+              <div className="page-help-fold-body">
+                <p>
+                  Uso interno: búsqueda manual, accesos rápidos y exportación. En terreno, el mismo QR
+                  abre solo el formulario que corresponde (sin menús de administración) cuando la URL
+                  incluye <code>?e=</code> al escanear.
+                </p>
+              </div>
+            </details>
+          ) : null}
+
+          <div
+            id="panel-dashboard"
+            role="tabpanel"
+            aria-label={PAGE_META.dashboard.title}
+            hidden={tab !== 'dashboard'}
+          >
+            <DashboardView userName={user.fullName} onNavigate={setTab} />
+          </div>
+
+          <div
+            id="panel-generar"
+            role="tabpanel"
+            aria-label={PAGE_META.generar.title}
+            hidden={tab !== 'generar'}
+          >
           <GenerarView
             form={form}
             onFormChange={setForm}
@@ -299,49 +362,40 @@ function App() {
           />
         </div>
 
-        <div
-          id="panel-trazabilidad"
-          role="tabpanel"
-          aria-labelledby="tab-trazabilidad"
-          hidden={tab !== 'trazabilidad'}
-          className="tab-panel-traz"
-        >
-          <header className="page-intro no-print">
-            <p className="page-eyebrow">En campo y acopio</p>
-            <h2 className="page-heading">Registrar lecturas del QR</h2>
-            <p className="page-lead">
-              Uso interno: búsqueda manual, accesos rápidos y exportación. En terreno, el mismo QR
-              abre solo el formulario que corresponde (sin este panel) cuando la URL incluye{' '}
-              <code>?e=</code> al escanear.
-            </p>
-          </header>
-          <div className="no-print">
-            <TrackingView key={trackingKey} initialCode={trackingInitial} />
+          <div
+            id="panel-trazabilidad"
+            role="tabpanel"
+            aria-label={PAGE_META.trazabilidad.title}
+            hidden={tab !== 'trazabilidad'}
+            className="tab-panel-traz"
+          >
+            <div className="no-print">
+              <TrackingView key={trackingKey} initialCode={trackingInitial} />
+            </div>
           </div>
-        </div>
 
-        <div
-          id="panel-maestros"
-          role="tabpanel"
-          aria-labelledby="tab-maestros"
-          hidden={tab !== 'maestros'}
-        >
-          <div className="generar-stack">
-            <MasterDataView
+          <div
+            id="panel-maestros"
+            role="tabpanel"
+            aria-label={PAGE_META.maestros.title}
+            hidden={tab !== 'maestros'}
+          >
+            <MastersWorkspace
+              subTab={maestrosSubTab}
+              onSubTabChange={setMaestrosSubTab}
+              canManage={user.role === 'admin' || user.role === 'superadmin'}
               onImported={() => {
                 void loadCatalog(form.seasonId, form.companyId)
               }}
             />
-            <MastersAdminPanel canManage={user.role === 'admin' || user.role === 'superadmin'} />
           </div>
-        </div>
 
-        <div
-          id="panel-usuarios"
-          role="tabpanel"
-          aria-labelledby="tab-usuarios"
-          hidden={tab !== 'usuarios'}
-        >
+          <div
+            id="panel-usuarios"
+            role="tabpanel"
+            aria-label={PAGE_META.usuarios.title}
+            hidden={tab !== 'usuarios'}
+          >
           {user.role === 'superadmin' ? (
             <UsersAdminView />
           ) : (
@@ -352,38 +406,39 @@ function App() {
           )}
         </div>
 
-        {generatedRecords.length > 0 && (
-          <div className="print-only print-labels-stack" aria-hidden>
-            {generatedRecords.map((r) => (
-              <div key={r.id} className="print-label-page">
-                <LabelPreview record={r} />
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
+          {generatedRecords.length > 0 && (
+            <div className="print-only print-labels-stack" aria-hidden>
+              {generatedRecords.map((r) => (
+                <div key={r.id} className="print-label-page">
+                  <LabelPreview record={r} />
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
 
-      <footer className="app-footer no-print">
-        <details className="footer-help">
-          <summary>Ayuda: escaneo del QR y dónde se guardan los datos</summary>
-          <div className="footer-help-body">
-            <p>
-              El QR abre la app con <code>?e=CÓDIGO</code>: en celular solo verán el formulario de
-              salida JC o de llegada a acopio, según corresponda, sin menús. Esta pestaña es para
-              administración y registro manual en el mismo navegador.
-            </p>
-            <p>
-              Los datos viven en <strong>este navegador en este equipo</strong>. Para el celular:
-              ejecute <code>npm run server</code> (API Node + MySQL con las mismas variables{' '}
-              <code>MYSQL_*</code> del <code>.env</code>). En desarrollo, Vite enruta{' '}
-              <code>/api</code> al puerto 3001; solo si el API está en otro host use{' '}
-              <code>VITE_SYNC_API_BASE=http://IP:3001</code>. Al generar etiquetas se guardan en la
-              BD y al escanear el QR el móvil las descarga. Opcional: <code>VITE_LABEL_LOOKUP_URL</code>{' '}
-              con <code>{'{{id}}'}</code> si usa otro backend (p. ej. PHP).
-            </p>
-          </div>
-        </details>
-      </footer>
+        <footer className="app-footer no-print">
+          <details className="footer-help">
+            <summary>Ayuda: escaneo del QR y dónde se guardan los datos</summary>
+            <div className="footer-help-body">
+              <p>
+                El QR abre la app con <code>?e=CÓDIGO</code>: en celular solo verán el formulario de
+                salida JC o de llegada a acopio, según corresponda, sin menús. El escritorio permite
+                administración y registro manual en el mismo navegador.
+              </p>
+              <p>
+                Los datos viven en <strong>este navegador en este equipo</strong>. Para el celular:
+                ejecute <code>npm run server</code> (API Node + MySQL con las mismas variables{' '}
+                <code>MYSQL_*</code> del <code>.env</code>). En desarrollo, Vite enruta{' '}
+                <code>/api</code> al puerto 3001; solo si el API está en otro host use{' '}
+                <code>VITE_SYNC_API_BASE=http://IP:3001</code>. Al generar etiquetas se guardan en la
+                BD y al escanear el QR el móvil las descarga. Opcional: <code>VITE_LABEL_LOOKUP_URL</code>{' '}
+                con <code>{'{{id}}'}</code> si usa otro backend (p. ej. PHP).
+              </p>
+            </div>
+          </details>
+        </footer>
+      </AppShell>
     </div>
   )
 }

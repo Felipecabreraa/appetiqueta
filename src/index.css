@@ -1,32 +1,56 @@
 :root {
-  --text: #3d3a44;
-  --text-h: #141218;
-  --muted: #65606e;
-  --bg: #f0edf5;
-  --bg-subtle: #e8e4f0;
+  --text: #3a3644;
+  --text-h: #0f0d14;
+  --muted: #5c5668;
+  --muted-strong: #45405a;
+  --bg: #eceaf3;
+  --bg-subtle: #e6e3ef;
+  --canvas: #f5f4fa;
   --surface: #ffffff;
-  --surface-hover: #f7f6fa;
-  --border: #d4cee0;
-  --accent: #4f3eb5;
-  --accent-hover: #3f328f;
-  --accent-soft: rgba(79, 62, 181, 0.12);
-  --accent-ring: rgba(79, 62, 181, 0.38);
+  --surface-elevated: #fdfcfe;
+  --surface-hover: #f9f8fc;
+  /* Bordes más suaves: menos protagonismo */
+  --border: #e4e0ed;
+  --border-strong: #d4cfe0;
+  --line-faint: rgba(56, 48, 82, 0.07);
+  --line-muted: rgba(56, 48, 82, 0.1);
+  --accent: #4d3eb0;
+  --accent-hover: #3d328f;
+  --accent-muted: #6b5fc9;
+  --accent-soft: rgba(77, 62, 176, 0.12);
+  --accent-ring: rgba(77, 62, 176, 0.38);
   --ok: #0d6b63;
   --ok-soft: rgba(13, 107, 99, 0.12);
   --warn: #b45309;
   --warn-text: #92400e;
   --danger: #b91c1c;
   --danger-soft: rgba(185, 28, 28, 0.08);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(20, 18, 24, 0.06);
-  --shadow-md: 0 8px 24px rgba(20, 18, 24, 0.08);
-  --shadow-card: 0 1px 3px rgba(20, 18, 24, 0.06), 0 12px 32px rgba(79, 62, 181, 0.06);
-  --header-bg: color-mix(in srgb, var(--surface) 86%, transparent);
-  --transition-fast: 0.14s ease;
+  /* Navegación lateral (panel oscuro) */
+  --sidebar-bg: linear-gradient(165deg, #242030 0%, #1a1724 52%, #16141e 100%);
+  --sidebar-border: rgba(255, 255, 255, 0.055);
+  --sidebar-text: rgba(255, 255, 255, 0.88);
+  --sidebar-muted: rgba(200, 194, 230, 0.52);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.065);
+  --sidebar-item-active-bg: rgba(255, 255, 255, 0.09);
+  --sidebar-item-active-glow: rgba(124, 110, 220, 0.35);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --shadow-sm: 0 1px 3px rgba(22, 18, 36, 0.045);
+  --shadow-md: 0 12px 36px rgba(22, 18, 36, 0.08);
+  --shadow-card: 0 1px 2px rgba(22, 18, 36, 0.035), 0 10px 40px rgba(58, 48, 96, 0.055);
+  --shadow-sidebar: 1px 0 0 rgba(255, 255, 255, 0.05), 8px 0 32px rgba(8, 6, 18, 0.1);
+  --shadow-topbar: 0 1px 0 var(--line-faint);
+  --header-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+  --transition-fast: 0.16s ease;
+  /* Objetivo táctil mínimo recomendado (WCAG / HIG) */
+  --touch-target: 2.75rem;
+  /* Gutter horizontal del área de trabajo (topbar + main + footer alineados) */
+  --shell-pad-x: clamp(1.15rem, 2.4vw + 0.4rem, 2.65rem);
 
   font-family:
+    'Plus Jakarta Sans',
     system-ui,
     'Segoe UI',
     Roboto,
@@ -43,6 +67,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overflow-x: clip;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -57,20 +82,30 @@ html {
 
 body {
   margin: 0;
+  min-width: 0;
+  overflow-x: clip;
   background:
-    radial-gradient(1200px 480px at 50% -120px, color-mix(in srgb, var(--accent) 14%, transparent), transparent),
+    radial-gradient(1000px 420px at 12% -80px, color-mix(in srgb, var(--accent) 12%, transparent), transparent),
+    radial-gradient(800px 360px at 100% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent),
     var(--bg);
 }
 
 #root {
   width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  min-width: 0;
   min-height: 100svh;
   min-height: 100dvh;
-  padding-inline: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-left, 0px))
-    max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-right, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Full-bleed: el shell ocupa todo el ancho; gutters viven dentro del layout */
+  padding-inline: 0;
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+}
+
+/* Vistas sin AppShell (login, carga): respiro lateral y safe area */
+#root > main.app-main {
+  padding-left: max(var(--shell-pad-x), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--shell-pad-x), env(safe-area-inset-right, 0px));
 }
 
 h1,
