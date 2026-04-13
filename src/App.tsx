@@ -55,7 +55,7 @@ function App() {
       setGenSuccess(true)
       setLoteModalOpen(false)
       void pushLabelsBatchToServer(records).then((r) => {
-        if (!r.ok) setSyncWarning(r.message)
+        if (r.ok === false) setSyncWarning(r.message)
       })
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'Error al generar')
