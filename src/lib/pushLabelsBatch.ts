@@ -1,4 +1,5 @@
 import type { LabelRecord } from '../types'
+import { getSessionToken } from './session'
 
 export type PushResult = { ok: true } | { ok: false; message: string }
 
@@ -18,6 +19,8 @@ export async function pushLabelsBatchToServer(
     Accept: 'application/json',
   }
   if (key) headers['X-Sync-Key'] = key
+  const token = getSessionToken()
+  if (token) headers.Authorization = `Bearer ${token}`
 
   try {
     const res = await fetch(`${base}/api/labels/batch`, {

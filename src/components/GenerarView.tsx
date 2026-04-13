@@ -4,7 +4,7 @@ import { LabelForm } from './LabelForm'
 import { Modal } from './Modal'
 import { LabelPreview } from './LabelPreview'
 import { MAX_ETIQUETAS_LOTE } from '../lib/createLabelRecords'
-import type { LabelRecord } from '../types'
+import type { CompanyOption, CostCenterOption, LabelRecord, SeasonOption } from '../types'
 
 export type GenerarViewProps = {
   form: LabelFormValues
@@ -26,6 +26,14 @@ export type GenerarViewProps = {
   onGoToTracking: (labelId: string) => void
   onPrint: () => void
   onDownloadPdf: (records: LabelRecord[], fileName?: string) => void
+  seasons: SeasonOption[]
+  companies: CompanyOption[]
+  costCenters: CostCenterOption[]
+  mastersLoading?: boolean
+  mastersError?: string | null
+  onSeasonChange: (seasonId: number) => void
+  onCompanyChange: (companyId: number) => void
+  onCostCenterChange: (costCenterId: number) => void
 }
 
 export function GenerarView({
@@ -47,6 +55,14 @@ export function GenerarView({
   onGoToTracking,
   onPrint,
   onDownloadPdf,
+  seasons,
+  companies,
+  costCenters,
+  mastersLoading,
+  mastersError,
+  onSeasonChange,
+  onCompanyChange,
+  onCostCenterChange,
 }: GenerarViewProps) {
   const primera = generatedRecords[0]
   const esLote = generatedRecords.length > 1
@@ -324,6 +340,14 @@ export function GenerarView({
         <LabelForm
           values={form}
           onChange={onFormChange}
+          onSeasonChange={onSeasonChange}
+          onCompanyChange={onCompanyChange}
+          onCostCenterChange={onCostCenterChange}
+          seasons={seasons}
+          companies={companies}
+          costCenters={costCenters}
+          mastersLoading={mastersLoading}
+          mastersError={mastersError}
           onSubmit={onGenerate}
           submitLabel={submitLabel}
         />

@@ -1,1 +1,1 @@
-export type AppTab = 'generar' | 'trazabilidad'
+export type AppTab = 'generar' | 'trazabilidad' | 'maestros' | 'usuarios'

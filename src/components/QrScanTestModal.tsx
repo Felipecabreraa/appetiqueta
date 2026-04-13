@@ -16,10 +16,15 @@ export function QrScanTestModal({ open, onClose }: Props) {
   const [err, setErr] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
+  function handleClose() {
+    setErr(null)
+    setHint(null)
+    handledRef.current = false
+    onClose()
+  }
+
   useEffect(() => {
     if (!open) {
-      setErr(null)
-      setHint(null)
       handledRef.current = false
       return
     }
@@ -103,7 +108,7 @@ export function QrScanTestModal({ open, onClose }: Props) {
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Escanear QR (prueba en PC)"
       size="lg"
       closeLabel="Detener y cerrar"

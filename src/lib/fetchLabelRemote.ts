@@ -26,6 +26,16 @@ function pickNumOrNull(o: Record<string, unknown>, ...keys: string[]): number | 
   return null
 }
 
+function pickNum(o: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const value = o[key]
+    if (value === undefined || value === null || value === '') continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
 /** Convierte JSON del API (camelCase o snake_case como en schema MySQL) a LabelRecord. */
 export function normalizeRemoteLabelPayload(
   raw: unknown,
@@ -52,6 +62,9 @@ export function normalizeRemoteLabelPayload(
     especie: pickStr(inner, 'especie'),
     variedad: pickStr(inner, 'variedad'),
     centroCosto: pickStr(inner, 'centroCosto', 'centro_costo'),
+    seasonId: pickNum(inner, 'seasonId', 'season_id'),
+    companyId: pickNum(inner, 'companyId', 'company_id'),
+    seasonCostCenterId: pickNum(inner, 'seasonCostCenterId', 'season_cost_center_id'),
     sector: pickStr(inner, 'sector'),
     cantidadTotes: pickNumOrNull(inner, 'cantidadTotes', 'cantidad_totes'),
     jefeCuadrilla: pickStr(inner, 'jefeCuadrilla', 'jefe_cuadrilla'),

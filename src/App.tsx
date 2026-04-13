@@ -11,8 +11,16 @@ import { exportLabelsPdf } from './lib/exportLabelsPdf'
 import { pushLabelsBatchToServer } from './lib/pushLabelsBatch'
 import { saveLabelsBatch } from './lib/storage'
 import { readTrackingFromUrl, type TrackingSeed } from './lib/urlBootstrap'
-import type { LabelRecord } from './types'
+import type { AuthUser, CompanyOption, CostCenterOption, LabelRecord, SeasonOption } from './types'
 import { OperationalCaptureApp } from './components/OperationalCaptureApp'
+import { LoginView } from './components/LoginView'
+import { fetchCurrentUser, login, logout } from './lib/authApi'
+import { getStoredUser } from './lib/session'
+import { fetchCatalog } from './lib/masterDataApi'
+import { MasterDataView } from './components/MasterDataView'
+import { UsersAdminView } from './components/UsersAdminView'
+import { OperatorPortal } from './components/OperatorPortal'
+import { MastersAdminPanel } from './components/MastersAdminPanel'
 import './App.css'
 
 export type Tab = AppTab
@@ -20,8 +28,17 @@ export type Tab = AppTab
 const urlBoot = readTrackingFromUrl()
 
 function App() {
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
+  const [authLoading, setAuthLoading] = useState(true)
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [tab, setTab] = useState<AppTab>(urlBoot.tab)
   const [form, setForm] = useState<LabelFormValues>(() => defaultFormValues())
+  const [seasons, setSeasons] = useState<SeasonOption[]>([])
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
+  const [costCenters, setCostCenters] = useState<CostCenterOption[]>([])
+  const [mastersLoading, setMastersLoading] = useState(false)
+  const [mastersError, setMastersError] = useState<string | null>(null)
   const [cantidadLote, setCantidadLote] = useState(1)
   const [generatedRecords, setGeneratedRecords] = useState<LabelRecord[]>([])
   const [genError, setGenError] = useState<string | null>(null)
@@ -32,10 +49,91 @@ function App() {
   const [loteModalOpen, setLoteModalOpen] = useState(false)
   const [syncWarning, setSyncWarning] = useState<string | null>(null)
 
+  const canAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+
+  const loadCatalog = useCallback(async (seasonId?: number | null, companyId?: number | null) => {
+    setMastersLoading(true)
+    setMastersError(null)
+    try {
+      const payload = await fetchCatalog(seasonId, companyId)
+      setSeasons(payload.seasons)
+      setCompanies(payload.companies)
+      setCostCenters(payload.costCenters)
+      setForm((current) =>
+        !current.seasonId && payload.seasonId ? { ...current, seasonId: payload.seasonId } : current,
+      )
+    } catch (error) {
+      setMastersError('No se pudo cargar el catálogo maestro.')
+      console.error(error)
+    } finally {
+      setMastersLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchCurrentUser().then((next) => {
+      if (cancelled) return
+      setUser(next)
+      setAuthLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!user || !canAdmin) return
+    void loadCatalog(form.seasonId, form.companyId)
+  }, [user, canAdmin, loadCatalog, form.seasonId, form.companyId])
+
   const goToTrackingWith = useCallback((labelId: string) => {
     setTrackingSeed({ code: labelId.toUpperCase(), nonce: Date.now() })
     setTab('trazabilidad')
   }, [])
+
+  const handleSeasonChange = useCallback((seasonId: number) => {
+    setForm((current) => ({
+      ...current,
+      seasonId,
+      companyId: null,
+      seasonCostCenterId: null,
+      empresa: '',
+      centroCosto: '',
+      especie: '',
+      variedad: '',
+      csg: '',
+    }))
+    void loadCatalog(seasonId, null)
+  }, [loadCatalog])
+
+  const handleCompanyChange = useCallback((companyId: number) => {
+    const company = companies.find((x) => x.id === companyId)
+    setForm((current) => ({
+      ...current,
+      companyId,
+      seasonCostCenterId: null,
+      empresa: company?.name || '',
+      centroCosto: '',
+      especie: '',
+      variedad: '',
+      csg: '',
+    }))
+    void loadCatalog(form.seasonId, companyId)
+  }, [companies, form.seasonId, loadCatalog])
+
+  const handleCostCenterChange = useCallback((seasonCostCenterId: number) => {
+    const selected = costCenters.find((x) => x.id === seasonCostCenterId)
+    if (!selected) return
+    setForm((current) => ({
+      ...current,
+      seasonCostCenterId,
+      centroCosto: selected.center_code,
+      especie: selected.especie,
+      variedad: selected.variedad,
+      csg: selected.csg,
+    }))
+  }, [costCenters])
 
   const generate = useCallback(() => {
     setGenError(null)
@@ -103,12 +201,65 @@ function App() {
     )
   }
 
+  if (authLoading) {
+    return <main className="app-main">Cargando sesión...</main>
+  }
+
+  if (!user) {
+    return (
+      <LoginView
+        busy={loginBusy}
+        error={loginError}
+        onLogin={(username, password) => {
+          setLoginBusy(true)
+          setLoginError(null)
+          void login(username, password)
+            .then((result) => {
+              if (result.ok === false) {
+                setLoginError(result.message)
+                return
+              }
+              setUser(result.user)
+              setTab(result.user.role === 'operador' ? 'trazabilidad' : 'generar')
+              if (result.user.role === 'admin' || result.user.role === 'superadmin') {
+                void loadCatalog()
+              }
+            })
+            .finally(() => setLoginBusy(false))
+        }}
+      />
+    )
+  }
+
+  if (user.role === 'operador') {
+    return (
+      <div className="app">
+        <AppHeader
+          activeTab="trazabilidad"
+          onNavigate={() => undefined}
+          loteComplete={false}
+          role={user.role}
+          userName={user.fullName}
+          onLogout={() => {
+            void logout().finally(() => setUser(null))
+          }}
+        />
+        <OperatorPortal />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <AppHeader
         activeTab={tab}
         onNavigate={setTab}
         loteComplete={formComplete}
+        role={user.role}
+        userName={user.fullName}
+        onLogout={() => {
+          void logout().finally(() => setUser(null))
+        }}
       />
 
       <main id="contenido-principal" className="app-main">
@@ -137,6 +288,14 @@ function App() {
             onGoToTracking={goToTrackingWith}
             onPrint={printLabels}
             onDownloadPdf={downloadPdf}
+            seasons={seasons}
+            companies={companies}
+            costCenters={costCenters}
+            mastersLoading={mastersLoading}
+            mastersError={mastersError}
+            onSeasonChange={handleSeasonChange}
+            onCompanyChange={handleCompanyChange}
+            onCostCenterChange={handleCostCenterChange}
           />
         </div>
 
@@ -159,6 +318,38 @@ function App() {
           <div className="no-print">
             <TrackingView key={trackingKey} initialCode={trackingInitial} />
           </div>
+        </div>
+
+        <div
+          id="panel-maestros"
+          role="tabpanel"
+          aria-labelledby="tab-maestros"
+          hidden={tab !== 'maestros'}
+        >
+          <div className="generar-stack">
+            <MasterDataView
+              onImported={() => {
+                void loadCatalog(form.seasonId, form.companyId)
+              }}
+            />
+            <MastersAdminPanel canManage={user.role === 'admin' || user.role === 'superadmin'} />
+          </div>
+        </div>
+
+        <div
+          id="panel-usuarios"
+          role="tabpanel"
+          aria-labelledby="tab-usuarios"
+          hidden={tab !== 'usuarios'}
+        >
+          {user.role === 'superadmin' ? (
+            <UsersAdminView />
+          ) : (
+            <section className="card">
+              <h2>Acceso restringido</h2>
+              <p className="sub">Solo SuperAdmin puede administrar usuarios.</p>
+            </section>
+          )}
         </div>
 
         {generatedRecords.length > 0 && (

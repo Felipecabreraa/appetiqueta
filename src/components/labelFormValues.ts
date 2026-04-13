@@ -14,6 +14,9 @@ const empty: LabelFormValues = {
   especie: '',
   variedad: '',
   centroCosto: '',
+  seasonId: null,
+  companyId: null,
+  seasonCostCenterId: null,
   sector: '',
 }
 
@@ -21,8 +24,8 @@ export function defaultFormValues(): LabelFormValues {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const local =
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
-    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `T${pad(now.getHours())}:${pad(now.getMinutes())}`
   return { ...empty, fecha: local }
 }
 

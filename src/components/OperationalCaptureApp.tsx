@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchLabelRemote } from '../lib/fetchLabelRemote'
 import { getLabelLookupUrlTemplate } from '../lib/labelApiUrl'
 import {
@@ -16,14 +16,6 @@ import '../operational.css'
 
 type RemoteGate = 'fetching' | 'off' | 'done_ok' | 'done_miss' | 'done_err'
 
-function initialRemoteGate(labelId: string): RemoteGate {
-  const id = labelId.trim().toUpperCase()
-  const tpl = getLabelLookupUrlTemplate()
-  if (getLabelById(id)) return 'done_ok'
-  if (tpl) return 'fetching'
-  return 'off'
-}
-
 /**
  * Interfaz cerrada al abrir la app con ?e=CODIGO (mismo enlace que el QR).
  * Sin cabecera, pestañas ni módulos administrativos.
@@ -32,51 +24,56 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   const [rev, setRev] = useState(0)
   const bump = useCallback(() => setRev((r) => r + 1), [])
   /** Tras JC: mostrar cierre sin encadenar al formulario de acopio (otro escaneo aparte). */
-  const [jcAck, setJcAck] = useState(false)
+  const [jcAckLabelId, setJcAckLabelId] = useState<string | null>(null)
+  const [remoteState, setRemoteState] = useState<{
+    labelId: string
+    status: 'idle' | 'done_ok' | 'done_miss' | 'done_err'
+  }>({
+    labelId: labelId.trim().toUpperCase(),
+    status: 'idle',
+  })
 
   const id = labelId.trim().toUpperCase()
-
-  useEffect(() => {
-    setJcAck(false)
-  }, [id])
   const lookupTpl = getLabelLookupUrlTemplate()
-  const [remote, setRemote] = useState<RemoteGate>(() => initialRemoteGate(labelId))
+  const localLabel = getLabelById(id)
+  const remoteStatusForId =
+    remoteState.labelId === id
+      ? remoteState.status
+      : localLabel
+        ? 'done_ok'
+        : 'idle'
+  const remote: RemoteGate = localLabel
+    ? 'done_ok'
+    : !lookupTpl
+      ? 'off'
+      : remoteStatusForId === 'idle'
+        ? 'fetching'
+        : remoteStatusForId
 
   useEffect(() => {
-    if (getLabelById(id)) {
-      setRemote('done_ok')
-      return
-    }
-    if (!lookupTpl) {
-      setRemote('off')
-      return
-    }
+    if (localLabel || !lookupTpl || remoteStatusForId !== 'idle') return
     let cancelled = false
-    setRemote('fetching')
     fetchLabelRemote(id, lookupTpl)
       .then((rec) => {
         if (cancelled) return
         if (rec) {
           upsertLabel(rec)
           setRev((x) => x + 1)
-          setRemote('done_ok')
+          setRemoteState({ labelId: id, status: 'done_ok' })
         } else {
-          setRemote('done_miss')
+          setRemoteState({ labelId: id, status: 'done_miss' })
         }
       })
       .catch(() => {
-        if (!cancelled) setRemote('done_err')
+        if (!cancelled) setRemoteState({ labelId: id, status: 'done_err' })
       })
     return () => {
       cancelled = true
     }
-  }, [id, lookupTpl])
+  }, [id, lookupTpl, localLabel, remoteStatusForId])
 
-  const { label, phase } = useMemo(() => {
-    const l = getLabelById(id)
-    const p = getOperationalPhase(id)
-    return { label: l, phase: p }
-  }, [id, rev])
+  const label = getLabelById(id)
+  const phase = getOperationalPhase(id)
 
   if (remote === 'fetching') {
     return <OperationalLoading message="Buscando etiqueta en el servidor…" />
@@ -96,7 +93,7 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
     return <OperationalCompleteView labelId={id} />
   }
 
-  if (jcAck) {
+  if (jcAckLabelId === id) {
     return <OperationalJcSavedAckView labelId={id} />
   }
 
@@ -107,7 +104,7 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
         label={label}
         onSaved={() => {
           bump()
-          setJcAck(true)
+          setJcAckLabelId(id)
         }}
       />
     )
