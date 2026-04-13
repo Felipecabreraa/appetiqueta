@@ -31,10 +31,10 @@ async function createPool() {
   const password = process.env.MYSQL_PASSWORD ?? ''
   const database = process.env.MYSQL_DATABASE
   if (!user || !database) {
-    console.error(
-      '[sync-api] Faltan MYSQL_USER o MYSQL_DATABASE en .env. Revise la configuración.',
+    console.warn(
+      '[sync-api] MYSQL_USER o MYSQL_DATABASE no configurados. API de sincronizacion deshabilitada hasta configurar variables.',
     )
-    process.exit(1)
+    return null
   }
   return mysql.createPool({
     host,
@@ -104,15 +104,23 @@ ON DUPLICATE KEY UPDATE
 
 async function main() {
   const pool = await createPool()
+  const dbReady = Boolean(pool)
   const app = express()
   app.use(cors({ origin: true }))
   app.use(express.json({ limit: '2mb' }))
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, service: 'appetiquetado-sync' })
+    res.json({
+      ok: true,
+      service: 'appetiquetado-sync',
+      dbReady,
+    })
   })
 
   app.get('/api/labels/:id', async (req, res) => {
+    if (!pool) {
+      return res.status(503).json({ ok: false, error: 'db_not_configured' })
+    }
     const id = String(req.params.id || '')
       .trim()
       .toUpperCase()
@@ -137,6 +145,9 @@ async function main() {
   })
 
   app.post('/api/labels/batch', requireSyncKey, async (req, res) => {
+    if (!pool) {
+      return res.status(503).json({ ok: false, error: 'db_not_configured' })
+    }
     const raw = req.body?.labels
     if (!Array.isArray(raw) || raw.length === 0) {
       return res.status(400).json({ ok: false, error: 'labels_required' })
