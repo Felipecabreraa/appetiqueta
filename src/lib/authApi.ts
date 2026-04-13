@@ -1,6 +1,6 @@
 import type { AuthUser, UserRole } from '../types'
 import { apiFetch } from './apiClient'
-import { clearSession, saveSession } from './session'
+import { clearSession, getSessionToken, saveSession } from './session'
 
 export type LoginResult =
   | { ok: true; user: AuthUser }
@@ -50,9 +50,14 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const token = getSessionToken()
+  if (!token) return null
   try {
     const res = await apiFetch('/api/auth/me')
-    if (!res.ok) return null
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) clearSession()
+      return null
+    }
     const data: unknown = await res.json().catch(() => ({}))
     if (!data || typeof data !== 'object') return null
     return parseUser((data as { user?: unknown }).user)

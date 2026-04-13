@@ -75,7 +75,7 @@ async function createPool() {
     console.warn('[sync-api] Configure MYSQL_USER y MYSQL_DATABASE para habilitar la API.')
     return null
   }
-  return mysql.createPool({
+  const pool = mysql.createPool({
     host,
     user,
     password,
@@ -84,6 +84,20 @@ async function createPool() {
     connectionLimit: 10,
     dateStrings: false,
   })
+  try {
+    const conn = await pool.getConnection()
+    await conn.ping()
+    conn.release()
+    return pool
+  } catch (error) {
+    console.error('[sync-api] No fue posible conectar a MySQL en el arranque:', error)
+    try {
+      await pool.end()
+    } catch {
+      // Ignorado: el pool puede no estar completamente inicializado.
+    }
+    return null
+  }
 }
 
 async function ensureBaseData(pool) {
@@ -368,9 +382,19 @@ ON DUPLICATE KEY UPDATE
 `
 
 async function main() {
-  const pool = await createPool()
+  let pool = await createPool()
   if (pool) {
-    await ensureBaseData(pool)
+    try {
+      await ensureBaseData(pool)
+    } catch (error) {
+      console.error('[sync-api] Error inicializando datos base en MySQL:', error)
+      try {
+        await pool.end()
+      } catch {
+        // Ignorado: el servidor seguirá en modo sin DB.
+      }
+      pool = null
+    }
   }
   const dbReady = Boolean(pool)
   const app = express()
