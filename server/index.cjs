@@ -44,6 +44,10 @@ function normalizeMasterName(value) {
   return String(value || '').trim()
 }
 
+function normalizeLimitedText(value, maxLength) {
+  return normalizeMasterName(value).slice(0, maxLength)
+}
+
 function toCode(value) {
   const text = String(value || '')
     .trim()
@@ -197,19 +201,63 @@ function normalizeLabelInput(item) {
   return {
     id,
     createdAt,
-    fecha: String(item?.fecha ?? ''),
-    exportacion: String(item?.exportacion ?? ''),
-    empresa: String(item?.empresa ?? ''),
-    csg: String(item?.csg ?? ''),
-    especie: String(item?.especie ?? ''),
-    variedad: String(item?.variedad ?? ''),
-    centroCosto: String(item?.centroCosto ?? item?.centro_costo ?? ''),
-    sector: String(item?.sector ?? ''),
+    fecha: normalizeLimitedText(item?.fecha, 64),
+    exportacion: normalizeLimitedText(item?.exportacion, 255),
+    empresa: normalizeLimitedText(item?.empresa, 255),
+    csg: normalizeLimitedText(item?.csg, 255),
+    especie: normalizeLimitedText(item?.especie, 255),
+    variedad: normalizeLimitedText(item?.variedad, 255),
+    centroCosto: normalizeLimitedText(item?.centroCosto ?? item?.centro_costo, 255),
+    sector: normalizeLimitedText(item?.sector, 255),
     cantidadTotes,
-    jefeCuadrilla: String(item?.jefeCuadrilla ?? item?.jefe_cuadrilla ?? '').trim(),
+    jefeCuadrilla: normalizeLimitedText(item?.jefeCuadrilla ?? item?.jefe_cuadrilla, 255),
     seasonId: item?.seasonId ? Number(item.seasonId) : null,
     companyId: item?.companyId ? Number(item.companyId) : null,
     seasonCostCenterId: item?.seasonCostCenterId ? Number(item.seasonCostCenterId) : null,
+  }
+}
+
+async function insertLabelRecord(conn, payload, resolved, createdBy) {
+  await conn.execute(INSERT_SQL, [
+    payload.id,
+    payload.createdAt,
+    payload.fecha,
+    payload.exportacion,
+    resolved.seasonId,
+    resolved.companyId,
+    resolved.seasonCostCenterId,
+    resolved.empresa,
+    resolved.csg,
+    resolved.especie,
+    resolved.variedad,
+    resolved.centroCosto,
+    payload.sector,
+    payload.cantidadTotes,
+    payload.jefeCuadrilla,
+    createdBy,
+  ])
+}
+
+async function insertLabelRecordWithFallback(conn, payload, resolved, createdBy) {
+  try {
+    await insertLabelRecord(conn, payload, resolved, createdBy)
+  } catch (error) {
+    const fkViolation =
+      error &&
+      typeof error === 'object' &&
+      (error.code === 'ER_NO_REFERENCED_ROW_2' || error.code === 'ER_ROW_IS_REFERENCED_2')
+    if (!fkViolation) throw error
+    await insertLabelRecord(
+      conn,
+      payload,
+      {
+        ...resolved,
+        seasonId: null,
+        companyId: null,
+        seasonCostCenterId: null,
+      },
+      createdBy,
+    )
   }
 }
 
@@ -944,24 +992,7 @@ async function main() {
       await conn.beginTransaction()
       for (const payload of payloads) {
         const resolved = await resolveLabelCatalog(conn, payload)
-        await conn.execute(INSERT_SQL, [
-          payload.id,
-          payload.createdAt,
-          payload.fecha,
-          payload.exportacion,
-          resolved.seasonId,
-          resolved.companyId,
-          resolved.seasonCostCenterId,
-          resolved.empresa,
-          resolved.csg,
-          resolved.especie,
-          resolved.variedad,
-          resolved.centroCosto,
-          payload.sector,
-          payload.cantidadTotes,
-          payload.jefeCuadrilla,
-          req.auth.userId,
-        ])
+        await insertLabelRecordWithFallback(conn, payload, resolved, req.auth.userId)
       }
       await conn.commit()
       return res.json({ ok: true, count: payloads.length })
