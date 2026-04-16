@@ -174,6 +174,21 @@ export function addMovement(m: Movement): void {
   writeJson(MOVEMENTS_KEY, list)
 }
 
+/**
+ * Reemplaza en localStorage todos los movimientos de una etiqueta (p. ej. tras sincronizar con el servidor).
+ */
+export function replaceMovementsForLabel(labelId: string, movements: Movement[]): void {
+  const id = labelId.trim().toUpperCase()
+  const list = getMovements().filter((m) => m.labelId.trim().toUpperCase() !== id)
+  for (const m of movements) {
+    list.push({
+      ...m,
+      labelId: m.labelId.trim().toUpperCase(),
+    })
+  }
+  writeJson(MOVEMENTS_KEY, list)
+}
+
 export function movementsForLabel(labelId: string): Movement[] {
   const id = labelId.trim().toUpperCase()
   return getMovements().filter((m) => m.labelId === id)

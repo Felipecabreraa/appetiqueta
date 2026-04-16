@@ -1186,7 +1186,20 @@ async function main() {
         [id],
       )
       if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' })
-      return res.json({ ok: true, label: rows[0] })
+      let movementRows = []
+      try {
+        const [mRows] = await pool.execute(
+          `SELECT label_id, type, cantidad, at, registered_by
+           FROM movements WHERE label_id = ? ORDER BY at ASC`,
+          [id],
+        )
+        movementRows = mRows
+      } catch (mErr) {
+        if (!(mErr && typeof mErr === 'object' && mErr.code === 'ER_NO_SUCH_TABLE')) {
+          throw mErr
+        }
+      }
+      return res.json({ ok: true, label: rows[0], movements: movementRows })
     } catch (error) {
       console.error('[sync-api] GET /api/labels/:id', error)
       return res.status(500).json({ ok: false, error: 'db' })

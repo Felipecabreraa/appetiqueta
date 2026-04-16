@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchLabelRemote } from '../lib/fetchLabelRemote'
 import { getLabelLookupUrlTemplate } from '../lib/labelApiUrl'
-import {
-  getLabelById,
-  getOperationalPhase,
-  upsertLabel,
-} from '../lib/storage'
+import { syncLabelOperationalFromServer } from '../lib/syncLabelOperationalFromServer'
+import { getLabelById, getOperationalPhase } from '../lib/storage'
 import { OperationalAcopioForm } from './OperationalAcopioForm'
 import { OperationalCompleteView } from './OperationalCompleteView'
 import { OperationalJcForm } from './OperationalJcForm'
@@ -35,48 +31,49 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
 
   const id = labelId.trim().toUpperCase()
   const lookupTpl = getLabelLookupUrlTemplate()
-  const localLabel = getLabelById(id)
-  const remoteStatusForId =
-    remoteState.labelId === id
-      ? remoteState.status
-      : localLabel
-        ? 'done_ok'
-        : 'idle'
-  const remote: RemoteGate = localLabel
-    ? 'done_ok'
-    : !lookupTpl
-      ? 'off'
-      : remoteStatusForId === 'idle'
-        ? 'fetching'
-        : remoteStatusForId
-
-  useEffect(() => {
-    if (localLabel || !lookupTpl || remoteStatusForId !== 'idle') return
-    let cancelled = false
-    fetchLabelRemote(id, lookupTpl)
-      .then((rec) => {
-        if (cancelled) return
-        if (rec) {
-          upsertLabel(rec)
-          setRev((x) => x + 1)
-          setRemoteState({ labelId: id, status: 'done_ok' })
-        } else {
-          setRemoteState({ labelId: id, status: 'done_miss' })
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRemoteState({ labelId: id, status: 'done_err' })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [id, lookupTpl, localLabel, remoteStatusForId])
-
   const label = getLabelById(id)
   const phase = getOperationalPhase(id)
 
+  let remote: RemoteGate = 'off'
+  if (lookupTpl) {
+    const st = remoteState.labelId === id ? remoteState.status : 'idle'
+    if (st === 'idle' && !label) remote = 'fetching'
+    else if (st === 'idle' && label) remote = 'done_ok'
+    else if (st === 'done_ok') remote = 'done_ok'
+    else if (st === 'done_miss') remote = 'done_miss'
+    else if (st === 'done_err') remote = 'done_err'
+  }
+
+  useEffect(() => {
+    if (!lookupTpl) return
+    let cancelled = false
+    setRemoteState({ labelId: id, status: 'idle' })
+    void syncLabelOperationalFromServer(id).then((r) => {
+      if (cancelled) return
+      const after = getLabelById(id)
+      if (r.ok) {
+        setRemoteState({ labelId: id, status: 'done_ok' })
+        setRev((x) => x + 1)
+        return
+      }
+      if (r.error === 'not_found' && !after) {
+        setRemoteState({ labelId: id, status: 'done_miss' })
+        return
+      }
+      if (after) {
+        setRemoteState({ labelId: id, status: 'done_ok' })
+        setRev((x) => x + 1)
+        return
+      }
+      setRemoteState({ labelId: id, status: 'done_err' })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id, lookupTpl])
+
   if (remote === 'fetching') {
-    return <OperationalLoading message="Buscando etiqueta en el servidor…" />
+    return <OperationalLoading message="Sincronizando con el servidor…" />
   }
 
   if (!label || phase === 'not_found') {

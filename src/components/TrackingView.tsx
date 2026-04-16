@@ -7,6 +7,7 @@ import { pushMovementToServer } from '../lib/pushMovementToServer'
 import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
 import { fetchJcForemen } from '../lib/masterDataApi'
 import { normalizeTrackingCodeFromQrPayload } from '../lib/navigateFromQrScan'
+import { syncLabelOperationalFromServer } from '../lib/syncLabelOperationalFromServer'
 import {
   LABELS_STORAGE_KEY,
   MOVEMENTS_STORAGE_KEY,
@@ -104,6 +105,37 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     if (trackingPhase === 'acopio') setTipo('acopio')
   }, [label?.id, trackingPhase])
 
+  /** Alinea totes/jefe y movimientos con el servidor (otro celular u oficina). */
+  useEffect(() => {
+    const id = code.trim().toUpperCase()
+    if (!id || !/^[A-Z0-9_-]{4,64}$/.test(id)) return
+    let cancelled = false
+    const t = window.setTimeout(() => {
+      void syncLabelOperationalFromServer(id).then(() => {
+        if (!cancelled) setTick((x) => x + 1)
+      })
+    }, 400)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [code])
+
+  useEffect(() => {
+    let cancelled = false
+    const ids = getLabels()
+      .slice(0, 12)
+      .map((l) => l.id)
+      .filter((x) => /^[A-Z0-9_-]{4,64}$/.test(x))
+    if (ids.length === 0) return
+    void Promise.all(ids.map((id) => syncLabelOperationalFromServer(id))).then(() => {
+      if (!cancelled) setTick((x) => x + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void fetchJcForemen()
@@ -134,6 +166,10 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       setMsg('Ingrese el código del QR.')
       setMsgTone('err')
       return
+    }
+    const synced = await syncLabelOperationalFromServer(id)
+    if (synced.ok) {
+      setTick((x) => x + 1)
     }
     const found = getLabelById(id)
     if (!found) {
@@ -243,6 +279,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           onFillCode={onScanFillCode}
         />
         <ul className="guide-list" aria-label="Recordatorio">
+          <li>
+            <strong>Plan B:</strong> si la cámara o el QR fallan, escriba el código a mano en{' '}
+            <strong>Código de la etiqueta</strong> y guarde igual que con el escaneo (mismo flujo
+            JC y luego acopio).
+          </li>
           <li>
             Use el <strong>mismo QR de la misma etiqueta física</strong> para la salida (JC) y para la
             llegada al acopio.

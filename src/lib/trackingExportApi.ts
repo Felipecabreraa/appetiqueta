@@ -35,7 +35,8 @@ function normalizeLabel(raw: unknown): LabelRecord | null {
   }
 }
 
-function normalizeMovement(raw: unknown): Movement | null {
+/** Normaliza una fila de movimiento (API camelCase o snake_case de MySQL). */
+export function normalizeMovementRow(raw: unknown): Movement | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
   const labelId = String(o.labelId || o.label_id || '')
@@ -43,7 +44,10 @@ function normalizeMovement(raw: unknown): Movement | null {
     .toUpperCase()
   const type = String(o.type || '') as Movement['type']
   const cantidad = Number(o.cantidad)
-  const at = String(o.at || '')
+  const at =
+    o.at instanceof Date && !Number.isNaN(o.at.getTime())
+      ? o.at.toISOString()
+      : String(o.at ?? '')
   if (!labelId || (type !== 'jc' && type !== 'acopio') || !Number.isFinite(cantidad) || !at) {
     return null
   }
@@ -71,7 +75,7 @@ export async function fetchTrackingExportPayload(): Promise<TrackingExportPayloa
     ? root.labels.map(normalizeLabel).filter((x): x is LabelRecord => Boolean(x))
     : []
   const movements = Array.isArray(root.movements)
-    ? root.movements.map(normalizeMovement).filter((x): x is Movement => Boolean(x))
+    ? root.movements.map(normalizeMovementRow).filter((x): x is Movement => Boolean(x))
     : []
   return { labels, movements }
 }
