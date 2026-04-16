@@ -19,6 +19,12 @@ const ROLE = {
   OPERADOR: 'operador',
 }
 
+const ACCESS = {
+  CATALOG: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
+  LABEL_BATCH: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
+  MASTER_ADMIN: [ROLE.SUPERADMIN],
+}
+
 function hashToken(token) {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex')
 }
@@ -623,7 +629,7 @@ async function main() {
     }
   })
 
-  app.get('/api/master-data/catalog', authMiddleware, async (req, res) => {
+  app.get('/api/master-data/catalog', authMiddleware, requireRoles(...ACCESS.CATALOG), async (req, res) => {
     if (!requireDb(pool, res)) return
     const seasonId = Number(req.query.seasonId || 0) || null
     const companyId = Number(req.query.companyId || 0) || null
@@ -682,7 +688,7 @@ async function main() {
   app.post(
     '/api/master-data/import',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const rows = Array.isArray(req.body?.rows) ? req.body.rows : []
@@ -754,7 +760,7 @@ async function main() {
   app.get(
     '/api/admin/masters',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (_req, res) => {
       if (!requireDb(pool, res)) return
       try {
@@ -770,7 +776,7 @@ async function main() {
   app.post(
     '/api/admin/seasons',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -817,7 +823,7 @@ async function main() {
   app.post(
     '/api/admin/companies',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -851,7 +857,7 @@ async function main() {
   app.post(
     '/api/admin/species',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -885,7 +891,7 @@ async function main() {
   app.post(
     '/api/admin/csg',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -919,7 +925,7 @@ async function main() {
   app.post(
     '/api/admin/varieties',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -956,7 +962,7 @@ async function main() {
   app.post(
     '/api/admin/relations',
     authMiddleware,
-    requireRoles(ROLE.SUPERADMIN, ROLE.ADMIN),
+    requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
@@ -1019,11 +1025,8 @@ async function main() {
     }
   })
 
-  app.post('/api/labels/batch', requireSyncKey, authMiddleware, async (req, res) => {
+  app.post('/api/labels/batch', requireSyncKey, authMiddleware, requireRoles(...ACCESS.LABEL_BATCH), async (req, res) => {
     if (!requireDb(pool, res)) return
-    if (![ROLE.SUPERADMIN, ROLE.ADMIN].includes(req.auth.role)) {
-      return res.status(403).json({ ok: false, error: 'forbidden' })
-    }
     const raw = req.body?.labels
     if (!Array.isArray(raw) || raw.length === 0) {
       return res.status(400).json({ ok: false, error: 'labels_required' })

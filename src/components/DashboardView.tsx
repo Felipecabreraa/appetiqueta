@@ -3,10 +3,25 @@ import { ModuleIcon } from './NavIcons'
 
 type Props = {
   userName: string
+  allowedTabs: AppTab[]
   onNavigate: (tab: AppTab) => void
 }
 
-export function DashboardView({ userName, onNavigate }: Props) {
+const OPERATION_TABS: AppTab[] = ['generar', 'trazabilidad']
+const ADMIN_TABS: AppTab[] = ['maestros', 'usuarios']
+
+const labels: Record<AppTab, { title: string; desc: string }> = {
+  dashboard: { title: 'Resumen', desc: 'Vista general del sistema' },
+  generar: { title: 'Crear etiquetas', desc: 'Lotes, QR e impresión' },
+  trazabilidad: { title: 'Registrar lecturas', desc: 'Búsqueda y trazabilidad' },
+  maestros: { title: 'Maestros', desc: 'Excel, temporadas y catálogos' },
+  usuarios: { title: 'Usuarios', desc: 'Accesos y roles' },
+}
+
+export function DashboardView({ userName, allowedTabs, onNavigate }: Props) {
+  const operationTabs = OPERATION_TABS.filter((tab) => allowedTabs.includes(tab))
+  const adminTabs = ADMIN_TABS.filter((tab) => allowedTabs.includes(tab))
+
   return (
     <div className="dashboard-grid">
       <section className="card dashboard-hero">
@@ -18,6 +33,7 @@ export function DashboardView({ userName, onNavigate }: Props) {
         </p>
       </section>
 
+      {operationTabs.length > 0 ? (
       <section className="card dashboard-panel" aria-labelledby="dash-actions-title">
         <div className="dashboard-panel-head">
           <h2 id="dash-actions-title" className="dashboard-section-title">
@@ -26,33 +42,25 @@ export function DashboardView({ userName, onNavigate }: Props) {
           <p className="dashboard-panel-kicker">Flujo diario</p>
         </div>
         <ul className="dashboard-link-grid">
-          <li>
-            <button type="button" className="dashboard-tile" onClick={() => onNavigate('generar')}>
-              <span className="dashboard-tile-icon" aria-hidden>
-                <ModuleIcon tab="generar" />
-              </span>
-              <span className="dashboard-tile-body">
-                <span className="dashboard-tile-label">Crear etiquetas</span>
-                <span className="dashboard-tile-desc">Lotes, QR e impresión</span>
-              </span>
-              <span className="dashboard-tile-chevron" aria-hidden />
-            </button>
-          </li>
-          <li>
-            <button type="button" className="dashboard-tile" onClick={() => onNavigate('trazabilidad')}>
-              <span className="dashboard-tile-icon" aria-hidden>
-                <ModuleIcon tab="trazabilidad" />
-              </span>
-              <span className="dashboard-tile-body">
-                <span className="dashboard-tile-label">Registrar lecturas</span>
-                <span className="dashboard-tile-desc">Búsqueda y trazabilidad</span>
-              </span>
-              <span className="dashboard-tile-chevron" aria-hidden />
-            </button>
-          </li>
+          {operationTabs.map((tab) => (
+            <li key={tab}>
+              <button type="button" className="dashboard-tile" onClick={() => onNavigate(tab)}>
+                <span className="dashboard-tile-icon" aria-hidden>
+                  <ModuleIcon tab={tab} />
+                </span>
+                <span className="dashboard-tile-body">
+                  <span className="dashboard-tile-label">{labels[tab].title}</span>
+                  <span className="dashboard-tile-desc">{labels[tab].desc}</span>
+                </span>
+                <span className="dashboard-tile-chevron" aria-hidden />
+              </button>
+            </li>
+          ))}
         </ul>
       </section>
+      ) : null}
 
+      {adminTabs.length > 0 ? (
       <section className="card dashboard-panel" aria-labelledby="dash-admin-title">
         <div className="dashboard-panel-head">
           <h2 id="dash-admin-title" className="dashboard-section-title">
@@ -61,32 +69,23 @@ export function DashboardView({ userName, onNavigate }: Props) {
           <p className="dashboard-panel-kicker">Configuración</p>
         </div>
         <ul className="dashboard-link-grid">
-          <li>
-            <button type="button" className="dashboard-tile" onClick={() => onNavigate('maestros')}>
-              <span className="dashboard-tile-icon" aria-hidden>
-                <ModuleIcon tab="maestros" />
-              </span>
-              <span className="dashboard-tile-body">
-                <span className="dashboard-tile-label">Maestros</span>
-                <span className="dashboard-tile-desc">Excel, temporadas y catálogos</span>
-              </span>
-              <span className="dashboard-tile-chevron" aria-hidden />
-            </button>
-          </li>
-          <li>
-            <button type="button" className="dashboard-tile" onClick={() => onNavigate('usuarios')}>
-              <span className="dashboard-tile-icon" aria-hidden>
-                <ModuleIcon tab="usuarios" />
-              </span>
-              <span className="dashboard-tile-body">
-                <span className="dashboard-tile-label">Usuarios</span>
-                <span className="dashboard-tile-desc">Accesos y roles</span>
-              </span>
-              <span className="dashboard-tile-chevron" aria-hidden />
-            </button>
-          </li>
+          {adminTabs.map((tab) => (
+            <li key={tab}>
+              <button type="button" className="dashboard-tile" onClick={() => onNavigate(tab)}>
+                <span className="dashboard-tile-icon" aria-hidden>
+                  <ModuleIcon tab={tab} />
+                </span>
+                <span className="dashboard-tile-body">
+                  <span className="dashboard-tile-label">{labels[tab].title}</span>
+                  <span className="dashboard-tile-desc">{labels[tab].desc}</span>
+                </span>
+                <span className="dashboard-tile-chevron" aria-hidden />
+              </button>
+            </li>
+          ))}
         </ul>
       </section>
+      ) : null}
     </div>
   )
 }

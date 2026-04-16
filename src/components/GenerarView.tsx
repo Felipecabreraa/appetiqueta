@@ -219,8 +219,8 @@ export function GenerarView({
           </div>
           {genSuccess && (
             <p className="alert success" role="status">
-              Generación lista. Imprima o baje el PDF; para trazas use{' '}
-              <strong>Registrar lecturas</strong>.
+              Etiqueta(s) registrada(s) correctamente. El formulario del lote se reinició para un nuevo
+              ingreso. Imprima o baje el PDF; para trazas use <strong>Registrar lecturas</strong>.
             </p>
           )}
           {syncWarning && (

@@ -6,7 +6,7 @@ type NavItem = { tab: AppTab; label: string }
 type Props = {
   activeTab: AppTab
   onNavigate: (tab: AppTab) => void
-  canUsers: boolean
+  allowedTabs: AppTab[]
   onItemActivate?: () => void
 }
 
@@ -18,8 +18,10 @@ const OPERATION_ITEMS: NavItem[] = [
 
 const ADMIN_ITEMS: NavItem[] = [{ tab: 'maestros', label: 'Maestros' }]
 
-export function AppSidebar({ activeTab, onNavigate, canUsers, onItemActivate }: Props) {
-  const adminItems: NavItem[] = canUsers ? [...ADMIN_ITEMS, { tab: 'usuarios', label: 'Usuarios' }] : ADMIN_ITEMS
+export function AppSidebar({ activeTab, onNavigate, allowedTabs, onItemActivate }: Props) {
+  const operationItems = OPERATION_ITEMS.filter((item) => allowedTabs.includes(item.tab))
+  const allAdminItems: NavItem[] = [...ADMIN_ITEMS, { tab: 'usuarios', label: 'Usuarios' }]
+  const adminItems = allAdminItems.filter((item) => allowedTabs.includes(item.tab))
 
   function go(tab: AppTab) {
     onNavigate(tab)
@@ -44,7 +46,7 @@ export function AppSidebar({ activeTab, onNavigate, canUsers, onItemActivate }: 
             Operación
           </p>
           <ul className="app-sidebar-list" aria-labelledby="nav-grupo-operacion">
-            {OPERATION_ITEMS.map(({ tab, label }) => (
+            {operationItems.map(({ tab, label }) => (
               <li key={tab}>
                 <button
                   type="button"
@@ -62,28 +64,30 @@ export function AppSidebar({ activeTab, onNavigate, canUsers, onItemActivate }: 
           </ul>
         </div>
 
-        <div className="app-sidebar-group app-sidebar-group--admin">
-          <p className="app-sidebar-group-label" id="nav-grupo-admin">
-            Administración
-          </p>
-          <ul className="app-sidebar-list" aria-labelledby="nav-grupo-admin">
-            {adminItems.map(({ tab, label }) => (
-              <li key={tab}>
-                <button
-                  type="button"
-                  className={`app-sidebar-link${activeTab === tab ? ' app-sidebar-link--active' : ''}`}
-                  aria-current={activeTab === tab ? 'page' : undefined}
-                  onClick={() => go(tab)}
-                >
-                  <span className="app-sidebar-link-inner">
-                    <ModuleIcon tab={tab} className="app-sidebar-link-icon" />
-                    <span className="app-sidebar-link-text">{label}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {adminItems.length > 0 ? (
+          <div className="app-sidebar-group app-sidebar-group--admin">
+            <p className="app-sidebar-group-label" id="nav-grupo-admin">
+              Administración
+            </p>
+            <ul className="app-sidebar-list" aria-labelledby="nav-grupo-admin">
+              {adminItems.map(({ tab, label }) => (
+                <li key={tab}>
+                  <button
+                    type="button"
+                    className={`app-sidebar-link${activeTab === tab ? ' app-sidebar-link--active' : ''}`}
+                    aria-current={activeTab === tab ? 'page' : undefined}
+                    onClick={() => go(tab)}
+                  >
+                    <span className="app-sidebar-link-inner">
+                      <ModuleIcon tab={tab} className="app-sidebar-link-icon" />
+                      <span className="app-sidebar-link-text">{label}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </nav>
     </aside>
   )

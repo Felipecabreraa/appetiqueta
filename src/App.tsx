@@ -7,7 +7,6 @@ import { AppSidebar } from './components/AppSidebar'
 import { DashboardView } from './components/DashboardView'
 import { GenerarView } from './components/GenerarView'
 import { MastersWorkspace } from './components/MastersWorkspace'
-import { OperatorShell } from './components/OperatorShell'
 import { PageHeader } from './components/PageHeader'
 import { isLabelFormComplete, defaultFormValues, type LabelFormValues } from './components/labelFormValues'
 import { LabelPreview } from './components/LabelPreview'
@@ -25,12 +24,20 @@ import { fetchCurrentUser, login, logout } from './lib/authApi'
 import { getStoredUser } from './lib/session'
 import { fetchCatalog } from './lib/masterDataApi'
 import { UsersAdminView } from './components/UsersAdminView'
-import { OperatorPortal } from './components/OperatorPortal'
+import { canAccessTab, getAllowedTabs, getDefaultTabForRole, getRoleLabel } from './lib/roleAccess'
 import './App.css'
 
 export type Tab = AppTab
 
 const urlBoot = readTrackingFromUrl()
+const TAB_SET: Set<AppTab> = new Set(['dashboard', 'generar', 'trazabilidad', 'maestros', 'usuarios'])
+
+function readTabFromHash(): AppTab | null {
+  if (typeof window === 'undefined') return null
+  const raw = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase()
+  if (!raw) return null
+  return TAB_SET.has(raw as AppTab) ? (raw as AppTab) : null
+}
 
 function App() {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
@@ -55,8 +62,12 @@ function App() {
   const [syncWarning, setSyncWarning] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
   const [maestrosSubTab, setMaestrosSubTab] = useState<MaestrosSubTab>('excel')
+  const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null)
 
-  const canAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const role = user?.role ?? null
+  const allowedTabs = useMemo(() => (role ? getAllowedTabs(role) : []), [role])
+  const canUseGenerator = role ? canAccessTab(role, 'generar') : false
+  const canManageMasters = role === 'superadmin'
 
   useEffect(() => {
     if (!navOpen) return
@@ -95,6 +106,22 @@ function App() {
     }
   }, [])
 
+  const navigateToTab = useCallback(
+    (nextTab: AppTab, notifyOnDenied = true) => {
+      if (!role) return
+      if (canAccessTab(role, nextTab)) {
+        setTab(nextTab)
+        if (notifyOnDenied) setAccessDeniedMessage(null)
+        return
+      }
+      setTab(getDefaultTabForRole(role))
+      if (notifyOnDenied) {
+        setAccessDeniedMessage(`No tiene permisos para acceder al módulo "${PAGE_META[nextTab].title}".`)
+      }
+    },
+    [role],
+  )
+
   useEffect(() => {
     let cancelled = false
     void fetchCurrentUser().then((next) => {
@@ -108,14 +135,46 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!user || !canAdmin) return
+    if (!user || !canUseGenerator) return
     void loadCatalog(form.seasonId, form.companyId)
-  }, [user, canAdmin, loadCatalog, form.seasonId, form.companyId])
+  }, [user, canUseGenerator, loadCatalog, form.seasonId, form.companyId])
+
+  useEffect(() => {
+    if (!role) return
+    if (canAccessTab(role, tab)) return
+    setTab(getDefaultTabForRole(role))
+  }, [role, tab])
+
+  useEffect(() => {
+    if (!accessDeniedMessage) return
+    const id = window.setTimeout(() => setAccessDeniedMessage(null), 4200)
+    return () => window.clearTimeout(id)
+  }, [accessDeniedMessage])
+
+  useEffect(() => {
+    if (!user || urlBoot.operational) return
+    const applyHashTab = () => {
+      const hashTab = readTabFromHash()
+      if (!hashTab) return
+      navigateToTab(hashTab)
+    }
+    applyHashTab()
+    window.addEventListener('hashchange', applyHashTab)
+    return () => window.removeEventListener('hashchange', applyHashTab)
+  }, [user, navigateToTab])
+
+  useEffect(() => {
+    if (!role || urlBoot.operational) return
+    const expected = `#${tab}`
+    if (window.location.hash !== expected) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${expected}`)
+    }
+  }, [role, tab])
 
   const goToTrackingWith = useCallback((labelId: string) => {
     setTrackingSeed({ code: labelId.toUpperCase(), nonce: Date.now() })
-    setTab('trazabilidad')
-  }, [])
+    navigateToTab('trazabilidad', false)
+  }, [navigateToTab])
 
   const handleSeasonChange = useCallback((seasonId: number) => {
     setForm((current) => ({
@@ -176,6 +235,7 @@ function App() {
       setBatchHistoryKey((k) => k + 1)
       setGeneratedRecords(records)
       setGenSuccess(true)
+      setForm(defaultFormValues())
       setLoteModalOpen(false)
       void pushLabelsBatchToServer(records).then((r) => {
         if (r.ok === false) setSyncWarning(r.message)
@@ -245,8 +305,8 @@ function App() {
                 return
               }
               setUser(result.user)
-              setTab(result.user.role === 'operador' ? 'trazabilidad' : 'dashboard')
-              if (result.user.role === 'admin' || result.user.role === 'superadmin') {
+              setTab(getDefaultTabForRole(result.user.role))
+              if (canAccessTab(result.user.role, 'generar')) {
                 void loadCatalog()
               }
             })
@@ -256,20 +316,7 @@ function App() {
     )
   }
 
-  if (user.role === 'operador') {
-    return (
-      <OperatorShell
-        userName={user.fullName}
-        onLogout={() => {
-          void logout().finally(() => setUser(null))
-        }}
-      >
-        <OperatorPortal />
-      </OperatorShell>
-    )
-  }
-
-  const roleLabel = user.role === 'superadmin' ? 'SuperAdmin' : 'Admin'
+  const roleLabel = getRoleLabel(user.role)
 
   return (
     <div className="app app--admin">
@@ -279,8 +326,8 @@ function App() {
         sidebar={
           <AppSidebar
             activeTab={tab}
-            onNavigate={setTab}
-            canUsers={user.role === 'superadmin'}
+            onNavigate={navigateToTab}
+            allowedTabs={allowedTabs}
             onItemActivate={() => setNavOpen(false)}
           />
         }
@@ -300,11 +347,17 @@ function App() {
         }
       >
         <main id="contenido-principal" className="app-main">
-          {tab !== 'generar' ? (
+          {accessDeniedMessage ? (
+            <p className="alert warn no-print" role="alert">
+              {accessDeniedMessage}
+            </p>
+          ) : null}
+
+          {tab !== 'generar' && canAccessTab(user.role, tab) ? (
             <PageHeader title={PAGE_META[tab].title} subtitle={PAGE_META[tab].subtitle} />
           ) : null}
 
-          {tab === 'trazabilidad' ? (
+          {tab === 'trazabilidad' && canAccessTab(user.role, 'trazabilidad') ? (
             <details className="page-help-fold no-print">
               <summary>Uso en terreno y registro manual</summary>
               <div className="page-help-fold-body">
@@ -321,90 +374,97 @@ function App() {
             id="panel-dashboard"
             role="tabpanel"
             aria-label={PAGE_META.dashboard.title}
-            hidden={tab !== 'dashboard'}
+            hidden={tab !== 'dashboard' || !canAccessTab(user.role, 'dashboard')}
           >
-            <DashboardView userName={user.fullName} onNavigate={setTab} />
+            {canAccessTab(user.role, 'dashboard') ? (
+              <DashboardView
+                userName={user.fullName}
+                allowedTabs={allowedTabs}
+                onNavigate={navigateToTab}
+              />
+            ) : null}
           </div>
 
           <div
             id="panel-generar"
             role="tabpanel"
             aria-label={PAGE_META.generar.title}
-            hidden={tab !== 'generar'}
+            hidden={tab !== 'generar' || !canAccessTab(user.role, 'generar')}
           >
-          <GenerarView
-            form={form}
-            onFormChange={setForm}
-            cantidadLote={cantidadLote}
-            onCantidadLoteChange={setCantidadLote}
-            generatedRecords={generatedRecords}
-            genError={genError}
-            genSuccess={genSuccess}
-            syncWarning={syncWarning}
-            pdfBusy={pdfBusy}
-            loteModalOpen={loteModalOpen}
-            onLoteModalOpenChange={setLoteModalOpen}
-            batchHistoryKey={batchHistoryKey}
-            formComplete={formComplete}
-            onGenerate={generate}
-            submitLabel={submitLabel}
-            onGoToTracking={goToTrackingWith}
-            onPrint={printLabels}
-            onDownloadPdf={downloadPdf}
-            seasons={seasons}
-            companies={companies}
-            costCenters={costCenters}
-            mastersLoading={mastersLoading}
-            mastersError={mastersError}
-            onSeasonChange={handleSeasonChange}
-            onCompanyChange={handleCompanyChange}
-            onCostCenterChange={handleCostCenterChange}
-          />
-        </div>
+            {canAccessTab(user.role, 'generar') ? (
+              <GenerarView
+                form={form}
+                onFormChange={setForm}
+                cantidadLote={cantidadLote}
+                onCantidadLoteChange={setCantidadLote}
+                generatedRecords={generatedRecords}
+                genError={genError}
+                genSuccess={genSuccess}
+                syncWarning={syncWarning}
+                pdfBusy={pdfBusy}
+                loteModalOpen={loteModalOpen}
+                onLoteModalOpenChange={setLoteModalOpen}
+                batchHistoryKey={batchHistoryKey}
+                formComplete={formComplete}
+                onGenerate={generate}
+                submitLabel={submitLabel}
+                onGoToTracking={goToTrackingWith}
+                onPrint={printLabels}
+                onDownloadPdf={downloadPdf}
+                seasons={seasons}
+                companies={companies}
+                costCenters={costCenters}
+                mastersLoading={mastersLoading}
+                mastersError={mastersError}
+                onSeasonChange={handleSeasonChange}
+                onCompanyChange={handleCompanyChange}
+                onCostCenterChange={handleCostCenterChange}
+              />
+            ) : null}
+          </div>
 
           <div
             id="panel-trazabilidad"
             role="tabpanel"
             aria-label={PAGE_META.trazabilidad.title}
-            hidden={tab !== 'trazabilidad'}
+            hidden={tab !== 'trazabilidad' || !canAccessTab(user.role, 'trazabilidad')}
             className="tab-panel-traz"
           >
-            <div className="no-print">
-              <TrackingView key={trackingKey} initialCode={trackingInitial} />
-            </div>
+            {canAccessTab(user.role, 'trazabilidad') ? (
+              <div className="no-print">
+                <TrackingView key={trackingKey} initialCode={trackingInitial} />
+              </div>
+            ) : null}
           </div>
 
           <div
             id="panel-maestros"
             role="tabpanel"
             aria-label={PAGE_META.maestros.title}
-            hidden={tab !== 'maestros'}
+            hidden={tab !== 'maestros' || !canAccessTab(user.role, 'maestros')}
           >
-            <MastersWorkspace
-              subTab={maestrosSubTab}
-              onSubTabChange={setMaestrosSubTab}
-              canManage={user.role === 'admin' || user.role === 'superadmin'}
-              onImported={() => {
-                void loadCatalog(form.seasonId, form.companyId)
-              }}
-            />
+            {canAccessTab(user.role, 'maestros') ? (
+              <MastersWorkspace
+                subTab={maestrosSubTab}
+                onSubTabChange={setMaestrosSubTab}
+                canManage={canManageMasters}
+                onImported={() => {
+                  void loadCatalog(form.seasonId, form.companyId)
+                }}
+              />
+            ) : null}
           </div>
 
           <div
             id="panel-usuarios"
             role="tabpanel"
             aria-label={PAGE_META.usuarios.title}
-            hidden={tab !== 'usuarios'}
+            hidden={tab !== 'usuarios' || !canAccessTab(user.role, 'usuarios')}
           >
-          {user.role === 'superadmin' ? (
-            <UsersAdminView />
-          ) : (
-            <section className="card">
-              <h2>Acceso restringido</h2>
-              <p className="sub">Solo SuperAdmin puede administrar usuarios.</p>
-            </section>
-          )}
-        </div>
+            {user.role === 'superadmin' ? (
+              <UsersAdminView />
+            ) : null}
+          </div>
 
           {generatedRecords.length > 0 && (
             <div className="print-only print-labels-stack" aria-hidden>
