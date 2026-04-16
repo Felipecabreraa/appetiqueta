@@ -8,9 +8,14 @@ const READER_DOM_ID = 'qr-reader-pc-test'
 type Props = {
   open: boolean
   onClose: () => void
+  /**
+   * Si se informa, el QR rellena el código en pantalla (mismo flujo que acceso rápido)
+   * sin navegar a ?e=.
+   */
+  onFillCode?: (rawPayload: string) => void
 }
 
-export function QrScanTestModal({ open, onClose }: Props) {
+export function QrScanTestModal({ open, onClose, onFillCode }: Props) {
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const handledRef = useRef(false)
   const [err, setErr] = useState<string | null>(null)
@@ -57,7 +62,7 @@ export function QrScanTestModal({ open, onClose }: Props) {
           (decoded) => {
             if (cancelled || handledRef.current) return
             handledRef.current = true
-            setHint('Código leído. Abriendo…')
+            setHint(onFillCode ? 'Código leído. Cargando en el formulario…' : 'Código leído. Abriendo…')
             void html5.stop().then(
               () => {
                 try {
@@ -69,7 +74,12 @@ export function QrScanTestModal({ open, onClose }: Props) {
               () => {},
             ).finally(() => {
               scannerRef.current = null
-              navigateFromScannedQrPayload(decoded)
+              if (onFillCode) {
+                onFillCode(decoded)
+                handleClose()
+              } else {
+                navigateFromScannedQrPayload(decoded)
+              }
             })
           },
           () => {},
@@ -103,7 +113,7 @@ export function QrScanTestModal({ open, onClose }: Props) {
         })
       }
     }
-  }, [open])
+  }, [open, onFillCode])
 
   return (
     <Modal
@@ -114,8 +124,17 @@ export function QrScanTestModal({ open, onClose }: Props) {
       closeLabel="Detener y cerrar"
     >
       <p className="qr-scan-modal-lead">
-        Use la webcam como haría el celular. Al detectar el QR se abrirá el mismo flujo de registro
-        (<code>?e=</code>) en esta pestaña.
+        {onFillCode ? (
+          <>
+            Use la webcam como haría el celular. Al detectar el QR, el código se cargará en el
+            formulario de arriba (igual que en acceso rápido), para registrar en esta misma pantalla.
+          </>
+        ) : (
+          <>
+            Use la webcam como haría el celular. Al detectar el QR se abrirá el mismo flujo de
+            registro (<code>?e=</code>) en esta pestaña.
+          </>
+        )}
       </p>
       {hint && !err && <p className="qr-scan-modal-hint">{hint}</p>}
       {err && (

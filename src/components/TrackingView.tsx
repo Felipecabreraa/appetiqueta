@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
 import { fetchJcForemen } from '../lib/masterDataApi'
+import { normalizeTrackingCodeFromQrPayload } from '../lib/navigateFromQrScan'
 import {
+  LABELS_STORAGE_KEY,
+  MOVEMENTS_STORAGE_KEY,
   addMovement,
+  bumpLabelAccessOrder,
   getLabelById,
   getLabels,
   getMovements,
+  getOperationalPhase,
   movementsForLabel,
   totalsForLabel,
   updateLabelRecord,
@@ -42,8 +47,13 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [msgTone, setMsgTone] = useState<'ok' | 'err' | null>(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [excelBusy, setExcelBusy] = useState(false)
+  const lastBumpedAccessId = useRef<string | null>(null)
 
   const label = code.trim() ? getLabelById(code) : undefined
+  const trackingPhase = label ? getOperationalPhase(label.id) : undefined
+  const flowComplete = trackingPhase === 'complete'
+  const lockTipoJc = trackingPhase === 'jc'
+  const lockTipoAcopio = trackingPhase === 'acopio'
   const movements = label ? movementsForLabel(label.id) : []
   const totals = label ? totalsForLabel(label.id) : { jc: 0, acopio: 0 }
   const diffJcAcopio = totals.jc - totals.acopio
@@ -52,6 +62,45 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     declaradoEnEtiqueta != null ? totals.jc - declaradoEnEtiqueta : null
   const recent = getLabels().slice(0, 12)
   const allMovements = getMovements()
+
+  const onScanFillCode = useCallback((rawPayload: string) => {
+    setCode(normalizeTrackingCodeFromQrPayload(rawPayload))
+    setMsg(null)
+    setMsgTone(null)
+  }, [])
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || (e.key !== LABELS_STORAGE_KEY && e.key !== MOVEMENTS_STORAGE_KEY)) return
+      setTick((t) => t + 1)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  useEffect(() => {
+    const id = code.trim().toUpperCase()
+    if (!id) {
+      lastBumpedAccessId.current = null
+      return
+    }
+    const found = getLabelById(id)
+    if (!found) {
+      lastBumpedAccessId.current = null
+      return
+    }
+    if (lastBumpedAccessId.current === id) return
+    lastBumpedAccessId.current = id
+    bumpLabelAccessOrder(id)
+    setTick((t) => t + 1)
+  }, [code])
+
+  useEffect(() => {
+    if (!label || !trackingPhase || trackingPhase === 'not_found') return
+    if (trackingPhase === 'complete') return
+    if (trackingPhase === 'jc') setTipo('jc')
+    if (trackingPhase === 'acopio') setTipo('acopio')
+  }, [label?.id, trackingPhase])
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +136,26 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     const found = getLabelById(id)
     if (!found) {
       setMsg('Código no encontrado. Verifique o genere la etiqueta primero.')
+      setMsgTone('err')
+      return
+    }
+    const phase = getOperationalPhase(found.id)
+    if (phase === 'complete') {
+      setMsg(
+        'Esta etiqueta ya tiene salida JC y llegada a acopio. No se pueden añadir más lecturas desde aquí.',
+      )
+      setMsgTone('err')
+      return
+    }
+    if (phase === 'jc' && tipo === 'acopio') {
+      setMsg('Primero debe registrar la salida de campo (JC). El acopio solo corresponde después del primer JC.')
+      setMsgTone('err')
+      return
+    }
+    if (phase === 'acopio' && tipo === 'jc') {
+      setMsg(
+        'Ya existe salida JC para esta etiqueta. El paso pendiente es la llegada al acopio; no puede volver a registrar JC desde aquí.',
+      )
       setMsgTone('err')
       return
     }
@@ -145,7 +214,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             Escanear QR (cámara)
           </button>
         </div>
-        <QrScanTestModal open={scanModalOpen} onClose={() => setScanModalOpen(false)} />
+        <QrScanTestModal
+          open={scanModalOpen}
+          onClose={() => setScanModalOpen(false)}
+          onFillCode={onScanFillCode}
+        />
         <ul className="guide-list" aria-label="Recordatorio">
           <li>
             Use el <strong>mismo QR de la misma etiqueta física</strong> para la salida (JC) y para la
@@ -158,13 +231,33 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             <strong>En acopio:</strong> totes que llegaron.
           </li>
         </ul>
+        {label && flowComplete ? (
+          <p className="tracking-flow-banner tracking-flow-banner--locked" role="status">
+            <strong>Circuito cerrado</strong> para esta etiqueta: ya hay salida JC y llegada a acopio.
+            No se pueden registrar más lecturas ni cambiar el tipo; puede cargar otra etiqueta arriba.
+          </p>
+        ) : null}
+        {label && lockTipoAcopio ? (
+          <p className="tracking-flow-banner tracking-flow-banner--next" role="status">
+            <strong>Paso pendiente: acopio</strong> — Ya hay salida JC. Debe registrar la llegada al
+            acopio (2.º paso). El tipo de lectura queda fijado en acopio para evitar errores.
+          </p>
+        ) : null}
+        {label && lockTipoJc ? (
+          <p className="tracking-flow-banner tracking-flow-banner--next" role="status">
+            <strong>Paso actual: primer JC</strong> — Aún no hay salida de campo registrada. El tipo
+            queda en JC hasta completar este paso.
+          </p>
+        ) : null}
         <div className="track-form">
           <label>
             Código de la etiqueta
             <input
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onChange={(e) =>
+                setCode(normalizeTrackingCodeFromQrPayload(e.target.value))
+              }
               placeholder="Escanee o escriba el código"
               autoComplete="off"
               spellCheck={false}
@@ -174,6 +267,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             Qué está registrando
             <select
               value={tipo}
+              disabled={Boolean(label && (flowComplete || lockTipoJc || lockTipoAcopio))}
               onChange={(e) => {
                 setTipo(e.target.value as MovementType)
                 setMsg(null)
@@ -191,6 +285,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
               min={tipo === 'jc' ? 1 : 0}
               step={1}
               value={cantidad || ''}
+              disabled={Boolean(label && flowComplete)}
               onChange={(e) =>
                 setCantidad(e.target.value === '' ? 0 : Number(e.target.value))
               }
@@ -209,6 +304,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                 list="jc-foremen-list"
                 value={jefeCuadrilla}
                 onChange={(e) => setJefeCuadrilla(e.target.value)}
+                disabled={Boolean(label && flowComplete)}
                 placeholder={
                   label?.cantidadTotes === null
                     ? 'Requerido la primera vez (JC)'
@@ -228,7 +324,12 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
               ) : null}
             </label>
           )}
-          <button type="button" className="btn primary" onClick={register}>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={Boolean(label && flowComplete)}
+            onClick={register}
+          >
             Guardar esta lectura
           </button>
         </div>
@@ -251,29 +352,60 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       <section className="card tracking-shortcuts-card">
         <h2>Acceso rápido</h2>
         <p className="sub shortcuts-intro">
-          Toque un código para cargarlo arriba y registrar sin escribir a mano.
+          Toque un código o escanéelo arriba: la fila activa y el detalle quedan alineados con el
+          registro.
         </p>
         <ul className="recent-list">
           {recent.length === 0 && (
             <li className="recent-empty muted">Aún no hay etiquetas en este equipo.</li>
           )}
-          {recent.map((l) => (
-            <li key={l.id}>
+          {recent.map((l) => {
+            const rowPhase = getOperationalPhase(l.id)
+            const phaseHint =
+              rowPhase === 'complete'
+                ? ' · circuito cerrado'
+                : rowPhase === 'acopio'
+                  ? ' · pendiente: acopio'
+                  : rowPhase === 'jc'
+                    ? ' · falta salida JC'
+                    : ''
+            return (
+            <li
+              key={l.id}
+              className={
+                l.id === code.trim().toUpperCase() ? 'recent-list-item--active' : undefined
+              }
+            >
               <button type="button" className="linkish" onClick={() => setCode(l.id)}>
                 {l.id}
               </button>
               <span className="muted">
                 {l.especie} ·{' '}
                 {l.cantidadTotes === null ? 'JC pendiente' : `${l.cantidadTotes} totes`}
+                {phaseHint}
               </span>
             </li>
-          ))}
+            )
+          })}
         </ul>
       </section>
 
       {label && (
         <section className="card tracking-detail-card">
           <h2>Etiqueta {label.id}</h2>
+          {trackingPhase === 'complete' ? (
+            <p className="sub muted" role="status">
+              Flujo JC + acopio completado; no se admiten más lecturas manuales para esta etiqueta.
+            </p>
+          ) : trackingPhase === 'acopio' ? (
+            <p className="sub" role="status">
+              <strong>Siguiente paso:</strong> llegada al acopio (registre totes que llegaron).
+            </p>
+          ) : trackingPhase === 'jc' ? (
+            <p className="sub" role="status">
+              <strong>Siguiente paso:</strong> primera salida de campo (JC).
+            </p>
+          ) : null}
           <dl className="detail-list">
             <dt>Empresa</dt>
             <dd>{label.empresa}</dd>

@@ -1,7 +1,10 @@
 import type { LabelRecord, Movement, MovementType } from '../types'
 
-const LABELS_KEY = 'appetiquetado:labels'
-const MOVEMENTS_KEY = 'appetiquetado:movements'
+export const LABELS_STORAGE_KEY = 'appetiquetado:labels'
+export const MOVEMENTS_STORAGE_KEY = 'appetiquetado:movements'
+
+const LABELS_KEY = LABELS_STORAGE_KEY
+const MOVEMENTS_KEY = MOVEMENTS_STORAGE_KEY
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -116,6 +119,17 @@ export function updateLabelRecord(labelId: string, patch: Partial<LabelRecord>):
   const i = list.findIndex((l) => l.id === id)
   if (i < 0) return
   list[i] = { ...list[i]!, ...patch }
+  writeJson(LABELS_KEY, list)
+}
+
+/** Sube la etiqueta al inicio del listado local (acceso rápido alineado con lo que se está cargando). */
+export function bumpLabelAccessOrder(labelId: string): void {
+  const id = labelId.trim().toUpperCase()
+  const list = getLabels()
+  const i = list.findIndex((l) => l.id === id)
+  if (i < 0) return
+  const [row] = list.splice(i, 1)
+  list.unshift(row!)
   writeJson(LABELS_KEY, list)
 }
 
