@@ -7,6 +7,7 @@ import {
 } from '../lib/storage'
 import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
+import { fetchJcForemen } from '../lib/masterDataApi'
 export function OperationalJcForm({
   label,
   onSaved,
@@ -19,6 +20,25 @@ export function OperationalJcForm({
   const [operador, setOperador] = useState(() => getStoredOperatorName())
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [jefesMaestro, setJefesMaestro] = useState<Array<{ id: number; name: string }>>([])
+  const [jefesMaestroLoading, setJefesMaestroLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchJcForemen()
+      .then((rows) => {
+        if (!cancelled) setJefesMaestro(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setJefesMaestro([])
+      })
+      .finally(() => {
+        if (!cancelled) setJefesMaestroLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -69,6 +89,8 @@ export function OperationalJcForm({
     }
   }
 
+  const usarSelectJefes = !jefesMaestroLoading && jefesMaestro.length > 0
+
   return (
     <div className="operational-app">
       <div className="operational-inner">
@@ -107,14 +129,34 @@ export function OperationalJcForm({
 
             <label className="operational-field">
               <span className="operational-label">Jefe de cuadrilla</span>
-              <input
-                type="text"
-                className="operational-input"
-                value={jefe}
-                onChange={(e) => setJefe(e.target.value)}
-                placeholder="Nombre"
-                autoComplete="name"
-              />
+              {jefesMaestroLoading ? (
+                <select className="operational-input" disabled value="">
+                  <option value="">Cargando lista…</option>
+                </select>
+              ) : usarSelectJefes ? (
+                <select
+                  className="operational-input"
+                  value={jefe}
+                  onChange={(e) => setJefe(e.target.value)}
+                  autoComplete="off"
+                >
+                  <option value="">Seleccione jefe de cuadrilla</option>
+                  {jefesMaestro.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  className="operational-input"
+                  value={jefe}
+                  onChange={(e) => setJefe(e.target.value)}
+                  placeholder="Nombre (no hay maestro o sin conexión)"
+                  autoComplete="name"
+                />
+              )}
             </label>
 
             <label className="operational-field">
