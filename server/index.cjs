@@ -217,15 +217,12 @@ function normalizeLabelInput(item) {
   }
 }
 
-async function insertLabelRecord(conn, payload, resolved, createdBy) {
-  await conn.execute(INSERT_SQL, [
-    payload.id,
-    payload.createdAt,
-    payload.fecha,
-    payload.exportacion,
-    resolved.seasonId,
-    resolved.companyId,
-    resolved.seasonCostCenterId,
+async function insertLabelRecord(conn, payload, resolved, createdBy, labelSchema) {
+  const values = [payload.id, payload.createdAt, payload.fecha, payload.exportacion]
+  if (labelSchema.seasonId) values.push(resolved.seasonId)
+  if (labelSchema.companyId) values.push(resolved.companyId)
+  if (labelSchema.seasonCostCenterId) values.push(resolved.seasonCostCenterId)
+  values.push(
     resolved.empresa,
     resolved.csg,
     resolved.especie,
@@ -235,12 +232,13 @@ async function insertLabelRecord(conn, payload, resolved, createdBy) {
     payload.cantidadTotes,
     payload.jefeCuadrilla,
     createdBy,
-  ])
+  )
+  await conn.execute(getLabelInsertSql(labelSchema), values)
 }
 
-async function insertLabelRecordWithFallback(conn, payload, resolved, createdBy) {
+async function insertLabelRecordWithFallback(conn, payload, resolved, createdBy, labelSchema) {
   try {
-    await insertLabelRecord(conn, payload, resolved, createdBy)
+    await insertLabelRecord(conn, payload, resolved, createdBy, labelSchema)
   } catch (error) {
     const fkViolation =
       error &&
@@ -257,6 +255,7 @@ async function insertLabelRecordWithFallback(conn, payload, resolved, createdBy)
         seasonCostCenterId: null,
       },
       createdBy,
+      labelSchema,
     )
   }
 }
@@ -406,34 +405,86 @@ async function fetchMastersBundle(pool) {
   return { seasons, companies, species, csg, varieties, relations }
 }
 
-const INSERT_SQL = `
+function buildLabelSchemaState(existingColumns) {
+  const set = new Set(existingColumns)
+  return {
+    seasonId: set.has('season_id'),
+    companyId: set.has('company_id'),
+    seasonCostCenterId: set.has('season_cost_center_id'),
+  }
+}
+
+async function detectLabelSchema(pool) {
+  const [rows] = await pool.execute(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'labels'`,
+  )
+  const columns = rows.map((row) => String(row.COLUMN_NAME || '').toLowerCase())
+  return buildLabelSchemaState(columns)
+}
+
+function getLabelInsertSql(labelSchema) {
+  const optionalColumns = []
+  if (labelSchema.seasonId) optionalColumns.push('season_id')
+  if (labelSchema.companyId) optionalColumns.push('company_id')
+  if (labelSchema.seasonCostCenterId) optionalColumns.push('season_cost_center_id')
+  const columns = [
+    'id',
+    'created_at',
+    'fecha',
+    'exportacion',
+    ...optionalColumns,
+    'empresa',
+    'csg',
+    'especie',
+    'variedad',
+    'centro_costo',
+    'sector',
+    'cantidad_totes',
+    'jefe_cuadrilla',
+    'created_by',
+  ]
+  const placeholders = columns.map(() => '?').join(', ')
+  const updateCols = columns.filter((column) => column !== 'id')
+  return `
 INSERT INTO labels (
-  id, created_at, fecha, exportacion, season_id, company_id, season_cost_center_id,
-  empresa, csg, especie, variedad, centro_costo, sector, cantidad_totes, jefe_cuadrilla, created_by
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ${columns.join(', ')}
+) VALUES (${placeholders})
 ON DUPLICATE KEY UPDATE
-  created_at = VALUES(created_at),
-  fecha = VALUES(fecha),
-  exportacion = VALUES(exportacion),
-  season_id = VALUES(season_id),
-  company_id = VALUES(company_id),
-  season_cost_center_id = VALUES(season_cost_center_id),
-  empresa = VALUES(empresa),
-  csg = VALUES(csg),
-  especie = VALUES(especie),
-  variedad = VALUES(variedad),
-  centro_costo = VALUES(centro_costo),
-  sector = VALUES(sector),
-  cantidad_totes = VALUES(cantidad_totes),
-  jefe_cuadrilla = VALUES(jefe_cuadrilla),
-  created_by = VALUES(created_by)
+  ${updateCols.map((column) => `${column} = VALUES(${column})`).join(',\n  ')}
 `
+}
+
+function getLabelSelectFields(labelSchema) {
+  const fields = [
+    'id',
+    'created_at',
+    'fecha',
+    'exportacion',
+    'empresa',
+    'csg',
+    'especie',
+    'variedad',
+    'centro_costo',
+    'sector',
+    'cantidad_totes',
+    'jefe_cuadrilla',
+  ]
+  if (labelSchema.seasonId) fields.push('season_id')
+  if (labelSchema.companyId) fields.push('company_id')
+  if (labelSchema.seasonCostCenterId) fields.push('season_cost_center_id')
+  return fields.join(', ')
+}
 
 async function main() {
   let pool = await createPool()
+  let labelSchema = buildLabelSchemaState([])
   if (pool) {
     try {
       await ensureBaseData(pool)
+      labelSchema = await detectLabelSchema(pool)
     } catch (error) {
       console.error('[sync-api] Error inicializando datos base en MySQL:', error)
       try {
@@ -447,6 +498,7 @@ async function main() {
   const dbReady = Boolean(pool)
   const app = express()
   app.locals.pool = pool
+  app.locals.labelSchema = labelSchema
 
   app.use(cors({ origin: true }))
   app.use(express.json({ limit: '8mb' }))
@@ -953,10 +1005,9 @@ async function main() {
       return res.status(400).json({ ok: false, error: 'id_invalido' })
     }
     try {
+      const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
       const [rows] = await pool.execute(
-        `SELECT id, created_at, fecha, exportacion, empresa, csg, especie, variedad,
-                centro_costo, sector, cantidad_totes, jefe_cuadrilla,
-                season_id, company_id, season_cost_center_id
+        `SELECT ${labelFields}
          FROM labels WHERE id = ? LIMIT 1`,
         [id],
       )
@@ -990,9 +1041,10 @@ async function main() {
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
+      const labelSchema = app.locals.labelSchema || buildLabelSchemaState([])
       for (const payload of payloads) {
         const resolved = await resolveLabelCatalog(conn, payload)
-        await insertLabelRecordWithFallback(conn, payload, resolved, req.auth.userId)
+        await insertLabelRecordWithFallback(conn, payload, resolved, req.auth.userId, labelSchema)
       }
       await conn.commit()
       return res.json({ ok: true, count: payloads.length })
