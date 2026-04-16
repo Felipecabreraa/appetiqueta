@@ -24,7 +24,13 @@ import { fetchCurrentUser, login, logout } from './lib/authApi'
 import { getStoredUser } from './lib/session'
 import { fetchCatalog } from './lib/masterDataApi'
 import { UsersAdminView } from './components/UsersAdminView'
-import { canAccessTab, getAllowedTabs, getDefaultTabForRole, getRoleLabel } from './lib/roleAccess'
+import {
+  canAccessTab,
+  canExportTrackingExcel,
+  getAllowedTabs,
+  getDefaultTabForRole,
+  getRoleLabel,
+} from './lib/roleAccess'
 import './App.css'
 
 export type Tab = AppTab
@@ -67,6 +73,7 @@ function App() {
   const role = user?.role ?? null
   const allowedTabs = useMemo(() => (role ? getAllowedTabs(role) : []), [role])
   const canUseGenerator = role ? canAccessTab(role, 'generar') : false
+  const canDownloadTrackingExcel = role ? canExportTrackingExcel(role) : false
   const canManageMasters = role === 'superadmin'
 
   useEffect(() => {
@@ -432,7 +439,11 @@ function App() {
           >
             {canAccessTab(user.role, 'trazabilidad') ? (
               <div className="no-print">
-                <TrackingView key={trackingKey} initialCode={trackingInitial} />
+                <TrackingView
+                  key={trackingKey}
+                  initialCode={trackingInitial}
+                  canExportExcel={canDownloadTrackingExcel}
+                />
               </div>
             ) : null}
           </div>

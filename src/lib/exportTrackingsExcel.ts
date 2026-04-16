@@ -107,10 +107,6 @@ function sheetFromRows(
  */
 export function exportTrackingsExcel(fileName?: string): void {
   const movements = getMovements()
-  if (movements.length === 0) {
-    throw new Error('No hay trackeos registrados para exportar.')
-  }
-
   const byId = new Map(getLabels().map((l) => [l.id, l]))
 
   const jcSorted = movements

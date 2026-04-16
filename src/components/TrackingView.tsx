@@ -24,9 +24,10 @@ const PILL_SHORT: Record<MovementType, string> = {
 
 interface Props {
   initialCode?: string
+  canExportExcel?: boolean
 }
 
-export function TrackingView({ initialCode = '' }: Props) {
+export function TrackingView({ initialCode = '', canExportExcel = false }: Props) {
   const [code, setCode] = useState(() => initialCode.trim().toUpperCase())
   const [tipo, setTipo] = useState<MovementType>('jc')
   const [cantidad, setCantidad] = useState<number>(0)
@@ -328,7 +329,7 @@ export function TrackingView({ initialCode = '' }: Props) {
           <button
             type="button"
             className="btn secondary"
-            disabled={allMovements.length === 0}
+            disabled={!canExportExcel}
             onClick={() => {
               try {
                 exportTrackingsExcel()
@@ -339,11 +340,15 @@ export function TrackingView({ initialCode = '' }: Props) {
           >
             Descargar Excel (.xlsx)
           </button>
-          {allMovements.length === 0 && (
+          {!canExportExcel ? (
             <p className="sub muted export-excel-empty">
-              Cuando registre lecturas, podrá bajar el archivo aquí.
+              Solo Admin y Super Admin pueden descargar el archivo Excel.
             </p>
-          )}
+          ) : allMovements.length === 0 ? (
+            <p className="sub muted export-excel-empty">
+              Puede descargar ahora: el archivo incluirá hojas con mensaje si aún no hay lecturas.
+            </p>
+          ) : null}
         </div>
       </section>
     </div>

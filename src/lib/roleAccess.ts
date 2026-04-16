@@ -28,3 +28,7 @@ export function getDefaultTabForRole(role: UserRole): AppTab {
 export function getRoleLabel(role: UserRole): string {
   return ROLE_LABEL[role]
 }
+
+export function canExportTrackingExcel(role: UserRole): boolean {
+  return role === 'superadmin' || role === 'admin'
+}
