@@ -22,6 +22,8 @@ const ROLE = {
 const ACCESS = {
   CATALOG: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
   LABEL_BATCH: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
+  MOVEMENT_WRITE: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
+  TRACKING_EXPORT: [ROLE.SUPERADMIN, ROLE.ADMIN],
   MASTER_ADMIN: [ROLE.SUPERADMIN],
 }
 
@@ -220,6 +222,34 @@ function normalizeLabelInput(item) {
     seasonId: item?.seasonId ? Number(item.seasonId) : null,
     companyId: item?.companyId ? Number(item.companyId) : null,
     seasonCostCenterId: item?.seasonCostCenterId ? Number(item.seasonCostCenterId) : null,
+  }
+}
+
+function normalizeMovementInput(item) {
+  const labelId = String(item?.labelId || item?.label_id || '')
+    .trim()
+    .toUpperCase()
+  if (!labelId || labelId.length > 64) return null
+
+  const type = String(item?.type || '')
+    .trim()
+    .toLowerCase()
+  if (type !== 'jc' && type !== 'acopio') return null
+
+  const cantidad = Number(item?.cantidad)
+  if (!Number.isFinite(cantidad) || cantidad < 0) return null
+
+  const at = item?.at ? new Date(item.at) : new Date()
+  if (Number.isNaN(at.getTime())) return null
+
+  const registeredBy = normalizeLimitedText(item?.registeredBy ?? item?.registered_by, 120)
+
+  return {
+    labelId,
+    type,
+    cantidad: Math.floor(cantidad),
+    at,
+    registeredBy,
   }
 }
 
@@ -1062,6 +1092,98 @@ async function main() {
       conn.release()
     }
   })
+
+  app.post('/api/movements', authMiddleware, requireRoles(...ACCESS.MOVEMENT_WRITE), async (req, res) => {
+    if (!requireDb(pool, res)) return
+    const payload = normalizeMovementInput(req.body?.movement || req.body)
+    if (!payload) {
+      return res.status(400).json({ ok: false, error: 'invalid_movement' })
+    }
+    try {
+      const [labelRows] = await pool.execute('SELECT id FROM labels WHERE id = ? LIMIT 1', [payload.labelId])
+      if (!labelRows.length) {
+        return res.status(404).json({ ok: false, error: 'label_not_found' })
+      }
+      await pool.execute(
+        `INSERT INTO movements (label_id, type, cantidad, at, registered_by, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          payload.labelId,
+          payload.type,
+          payload.cantidad,
+          payload.at,
+          payload.registeredBy,
+          req.auth.userId,
+        ],
+      )
+      return res.json({ ok: true })
+    } catch (error) {
+      if (error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE') {
+        return res.status(503).json({ ok: false, error: 'movements_table_missing' })
+      }
+      console.error('[sync-api] POST /api/movements', error)
+      return res.status(500).json({ ok: false, error: 'db' })
+    }
+  })
+
+  app.get(
+    '/api/reports/tracking-export',
+    authMiddleware,
+    requireRoles(...ACCESS.TRACKING_EXPORT),
+    async (_req, res) => {
+      if (!requireDb(pool, res)) return
+      try {
+        const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
+        const [labelRows] = await pool.execute(
+          `SELECT ${labelFields}
+           FROM labels
+           ORDER BY created_at ASC`,
+        )
+        let movementRows = []
+        try {
+          const [rows] = await pool.execute(
+            `SELECT label_id, type, cantidad, at, registered_by
+             FROM movements
+             ORDER BY at ASC`,
+          )
+          movementRows = rows
+        } catch (error) {
+          if (!(error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE')) {
+            throw error
+          }
+          movementRows = []
+        }
+        const labels = labelRows.map((row) => ({
+          id: row.id,
+          createdAt: row.created_at,
+          fecha: row.fecha || '',
+          exportacion: row.exportacion || '',
+          empresa: row.empresa || '',
+          csg: row.csg || '',
+          especie: row.especie || '',
+          variedad: row.variedad || '',
+          centroCosto: row.centro_costo || '',
+          sector: row.sector || '',
+          cantidadTotes: row.cantidad_totes === null ? null : Number(row.cantidad_totes),
+          jefeCuadrilla: row.jefe_cuadrilla || '',
+          seasonId: row.season_id ? Number(row.season_id) : null,
+          companyId: row.company_id ? Number(row.company_id) : null,
+          seasonCostCenterId: row.season_cost_center_id ? Number(row.season_cost_center_id) : null,
+        }))
+        const movements = movementRows.map((row) => ({
+          labelId: row.label_id,
+          type: row.type,
+          cantidad: Number(row.cantidad),
+          at: row.at,
+          registeredBy: row.registered_by || '',
+        }))
+        return res.json({ ok: true, labels, movements })
+      } catch (error) {
+        console.error('[sync-api] GET /api/reports/tracking-export', error)
+        return res.status(500).json({ ok: false, error: 'db' })
+      }
+    },
+  )
 
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath))

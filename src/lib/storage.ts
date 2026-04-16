@@ -21,14 +21,21 @@ function writeJson(key: string, value: unknown): void {
 function normalizeMovements(list: Movement[]): Movement[] {
   let changed = false
   const next = list.map((m) => {
+    const normalizedLabelId = String(m.labelId || '')
+      .trim()
+      .toUpperCase()
     const t = m.type as string
     if (t === 'salida') {
       changed = true
-      return { ...m, type: 'jc' as MovementType }
+      return { ...m, labelId: normalizedLabelId, type: 'jc' as MovementType }
     }
     if (t === 'llegada') {
       changed = true
-      return { ...m, type: 'acopio' as MovementType }
+      return { ...m, labelId: normalizedLabelId, type: 'acopio' as MovementType }
+    }
+    if (m.labelId !== normalizedLabelId) {
+      changed = true
+      return { ...m, labelId: normalizedLabelId }
     }
     return m
   })
@@ -40,7 +47,26 @@ function normalizeMovements(list: Movement[]): Movement[] {
 
 export function getLabels(): LabelRecord[] {
   const raw = readJson<LabelRecord[]>(LABELS_KEY, [])
-  return raw.map((l) => ({
+  let changed = false
+  const normalized = raw.map((l) => {
+    const normalizedId = String(l.id || '')
+      .trim()
+      .toUpperCase()
+    if (normalizedId !== l.id) changed = true
+    return {
+      ...l,
+      id: normalizedId,
+      cantidadTotes:
+        l.cantidadTotes === undefined
+          ? null
+          : l.cantidadTotes,
+      jefeCuadrilla: l.jefeCuadrilla ?? '',
+    }
+  })
+  if (changed) {
+    writeJson(LABELS_KEY, normalized)
+  }
+  return normalized.map((l) => ({
     ...l,
     cantidadTotes:
       l.cantidadTotes === undefined
@@ -127,7 +153,10 @@ export function getMovements(): Movement[] {
 
 export function addMovement(m: Movement): void {
   const list = getMovements()
-  list.push(m)
+  list.push({
+    ...m,
+    labelId: m.labelId.trim().toUpperCase(),
+  })
   writeJson(MOVEMENTS_KEY, list)
 }
 

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { LabelRecord } from '../types'
+import type { LabelRecord, Movement } from '../types'
 import {
   addMovement,
   getOperationalPhase,
   updateLabelRecord,
 } from '../lib/storage'
 import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
+import { pushMovementToServer } from '../lib/pushMovementToServer'
 export function OperationalJcForm({
   label,
   onSaved,
@@ -51,13 +52,15 @@ export function OperationalJcForm({
         cantidadTotes: totes,
         jefeCuadrilla: j,
       })
-      addMovement({
+      const movement: Movement = {
         labelId: label.id,
         type: 'jc',
         cantidad: totes,
         at,
         registeredBy: by,
-      })
+      }
+      addMovement(movement)
+      void pushMovementToServer(movement)
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo guardar.')

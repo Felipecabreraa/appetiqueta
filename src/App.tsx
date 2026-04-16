@@ -11,7 +11,7 @@ import { PageHeader } from './components/PageHeader'
 import { isLabelFormComplete, defaultFormValues, type LabelFormValues } from './components/labelFormValues'
 import { LabelPreview } from './components/LabelPreview'
 import { TrackingView } from './components/TrackingView'
-import { appendBatchLog } from './lib/batchHistory'
+import { appendBatchLog, getBatchHistory, resolveRecordsForBatch } from './lib/batchHistory'
 import { createLabelRecords, MAX_ETIQUETAS_LOTE } from './lib/createLabelRecords'
 import { exportLabelsPdf } from './lib/exportLabelsPdf'
 import { pushLabelsBatchToServer } from './lib/pushLabelsBatch'
@@ -58,7 +58,11 @@ function App() {
   const [mastersLoading, setMastersLoading] = useState(false)
   const [mastersError, setMastersError] = useState<string | null>(null)
   const [cantidadLote, setCantidadLote] = useState(1)
-  const [generatedRecords, setGeneratedRecords] = useState<LabelRecord[]>([])
+  const [generatedRecords, setGeneratedRecords] = useState<LabelRecord[]>(() => {
+    const latestBatch = getBatchHistory()[0]
+    if (!latestBatch) return []
+    return resolveRecordsForBatch(latestBatch)
+  })
   const [genError, setGenError] = useState<string | null>(null)
   const [batchHistoryKey, setBatchHistoryKey] = useState(0)
   const [pdfBusy, setPdfBusy] = useState(false)

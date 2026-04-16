@@ -2,9 +2,15 @@ import * as XLSX from 'xlsx'
 import type { LabelRecord, Movement } from '../types'
 import { getLabels, getMovements } from './storage'
 
+export type TrackingsExportData = {
+  labels: LabelRecord[]
+  movements: Movement[]
+}
+
 /** Nombres de hoja (max 31) sin caracteres prohibidos de Excel */
 const SHEET_JC = 'JC - Primera lectura QR'
 const SHEET_ACOPIO = 'Acopio - Segunda lectura QR'
+const SHEET_LABELS = 'Etiquetas generadas'
 
 function labelSnapshot(label: LabelRecord | undefined): {
   totesEtiqueta: string
@@ -90,6 +96,28 @@ function movementToAcopioRow(
   }
 }
 
+function labelToRow(label: LabelRecord, idx: number): Record<string, string | number> {
+  return {
+    '#': idx + 1,
+    'Codigo etiqueta (QR)': label.id,
+    Fecha: label.fecha,
+    Empresa: label.empresa,
+    CSG: label.csg,
+    Especie: label.especie,
+    Variedad: label.variedad,
+    'Centro costo': label.centroCosto,
+    Sector: label.sector,
+    Exportacion: label.exportacion,
+    'Totes declarados (primer JC)': label.cantidadTotes ?? '',
+    'Jefe cuadrilla (primer JC)': label.jefeCuadrilla.trim(),
+    'Creada en': new Date(label.createdAt).toLocaleString('es-CL', {
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }),
+    'Creada ISO': label.createdAt,
+  }
+}
+
 function sheetFromRows(
   rows: Record<string, string | number>[],
   emptyHint: string,
@@ -105,9 +133,17 @@ function sheetFromRows(
  * - Trackeo JC = primera lectura / validacion del QR (salida de totes).
  * - Trackeo Acopio = segunda lectura / validacion del QR (llegada al acopio).
  */
-export function exportTrackingsExcel(fileName?: string): void {
-  const movements = getMovements()
-  const byId = new Map(getLabels().map((l) => [l.id, l]))
+export function exportTrackingsExcel(fileName?: string, source?: TrackingsExportData): void {
+  const movements = source?.movements ?? getMovements()
+  const labels = source?.labels ?? getLabels()
+  const byId = new Map(
+    labels.map((l) => [
+      l.id
+        .trim()
+        .toUpperCase(),
+      l,
+    ]),
+  )
 
   const jcSorted = movements
     .filter((m) => m.type === 'jc')
@@ -116,12 +152,17 @@ export function exportTrackingsExcel(fileName?: string): void {
     .filter((m) => m.type === 'acopio')
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
-  const rowsJc = jcSorted.map((m, i) =>
-    movementToJcRow(m, i, byId.get(m.labelId)),
-  )
-  const rowsAcopio = acopioSorted.map((m, i) =>
-    movementToAcopioRow(m, i, byId.get(m.labelId)),
-  )
+  const rowsJc = jcSorted.map((m, i) => {
+    const label = byId.get(m.labelId.trim().toUpperCase())
+    return movementToJcRow(m, i, label)
+  })
+  const rowsAcopio = acopioSorted.map((m, i) => {
+    const label = byId.get(m.labelId.trim().toUpperCase())
+    return movementToAcopioRow(m, i, label)
+  })
+  const rowsLabels = [...labels]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((label, i) => labelToRow(label, i))
 
   const wb = XLSX.utils.book_new()
 
@@ -141,6 +182,14 @@ export function exportTrackingsExcel(fileName?: string): void {
       'No hay registros de trackeo Acopio (segunda lectura del QR) en este dispositivo.',
     ),
     SHEET_ACOPIO,
+  )
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheetFromRows(
+      rowsLabels,
+      'No hay etiquetas generadas en este dispositivo.',
+    ),
+    SHEET_LABELS,
   )
 
   const stamp = new Date().toISOString().slice(0, 10)

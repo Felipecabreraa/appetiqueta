@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { LabelRecord } from '../types'
+import type { LabelRecord, Movement } from '../types'
 import {
   addMovement,
   firstMovementOfType,
   getOperationalPhase,
 } from '../lib/storage'
 import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
+import { pushMovementToServer } from '../lib/pushMovementToServer'
 export function OperationalAcopioForm({
   label,
   onSaved,
@@ -49,13 +50,15 @@ export function OperationalAcopioForm({
       setStoredOperatorName(operador)
       const at = new Date().toISOString()
       const by = operador.trim() || undefined
-      addMovement({
+      const movement: Movement = {
         labelId: label.id,
         type: 'acopio',
         cantidad: llegada as number,
         at,
         registeredBy: by,
-      })
+      }
+      addMovement(movement)
+      void pushMovementToServer(movement)
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo guardar.')

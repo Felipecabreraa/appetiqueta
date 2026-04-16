@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
+import { pushMovementToServer } from '../lib/pushMovementToServer'
+import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
 import {
   addMovement,
   getLabelById,
@@ -36,6 +38,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [msg, setMsg] = useState<string | null>(null)
   const [msgTone, setMsgTone] = useState<'ok' | 'err' | null>(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
+  const [excelBusy, setExcelBusy] = useState(false)
 
   const label = code.trim() ? getLabelById(code) : undefined
   const movements = label ? movementsForLabel(label.id) : []
@@ -89,12 +92,14 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       }
     }
 
-    addMovement({
+    const movement = {
       labelId: found.id,
       type: tipo,
       cantidad,
       at: new Date().toISOString(),
-    })
+    }
+    addMovement(movement)
+    void pushMovementToServer(movement)
     setTick((t) => t + 1)
     setMsg(
       `Registrado: ${TIPO_LABEL[tipo]} — ${cantidad} totes para ${found.id}.`,
@@ -329,16 +334,28 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           <button
             type="button"
             className="btn secondary"
-            disabled={!canExportExcel}
+            disabled={!canExportExcel || excelBusy}
             onClick={() => {
               try {
-                exportTrackingsExcel()
+                if (!canExportExcel) return
+                setExcelBusy(true)
+                void fetchTrackingExportPayload()
+                  .then((payload) => {
+                    exportTrackingsExcel(undefined, payload)
+                  })
+                  .catch((e) => {
+                    window.alert(e instanceof Error ? e.message : 'Error al exportar')
+                  })
+                  .finally(() => {
+                    setExcelBusy(false)
+                  })
               } catch (e) {
+                setExcelBusy(false)
                 window.alert(e instanceof Error ? e.message : 'Error al exportar')
               }
             }}
           >
-            Descargar Excel (.xlsx)
+            {excelBusy ? 'Generando Excel...' : 'Descargar Excel (.xlsx)'}
           </button>
           {!canExportExcel ? (
             <p className="sub muted export-excel-empty">
@@ -346,7 +363,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             </p>
           ) : allMovements.length === 0 ? (
             <p className="sub muted export-excel-empty">
-              Puede descargar ahora: el archivo incluirá hojas con mensaje si aún no hay lecturas.
+              Puede descargar ahora: el archivo se construye con datos globales del servidor.
             </p>
           ) : null}
         </div>
