@@ -1,12 +1,9 @@
 import { useMemo } from 'react'
-import {
-  firstMovementOfType,
-  getLabelById,
-} from '../lib/storage'
+import { firstJcForLabel, firstMovementOfType, getLabelById } from '../lib/storage'
 export function OperationalCompleteView({ labelId }: { labelId: string }) {
   const id = labelId.trim().toUpperCase()
   const label = getLabelById(id)
-  const firstJc = firstMovementOfType(id, 'jc')
+  const firstJc = label ? firstJcForLabel(label) : firstMovementOfType(id, 'jc')
   const firstAcopio = firstMovementOfType(id, 'acopio')
 
   const summary = useMemo(() => {

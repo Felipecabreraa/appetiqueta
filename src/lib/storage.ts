@@ -206,6 +206,26 @@ export function firstMovementOfType(
 }
 
 /**
+ * Primer JC conocido: movimiento local o, si la etiqueta ya trae datos del servidor
+ * (otro celular guardó el JC), un registro sintético para el flujo operativo.
+ */
+export function firstJcForLabel(label: LabelRecord): Movement | undefined {
+  const id = label.id.trim().toUpperCase()
+  const local = firstMovementOfType(id, 'jc')
+  if (local) return local
+  if (label.cantidadTotes !== null && label.cantidadTotes !== undefined) {
+    return {
+      labelId: id,
+      type: 'jc',
+      cantidad: label.cantidadTotes,
+      at: label.createdAt,
+      registeredBy: label.jefeCuadrilla?.trim() || undefined,
+    }
+  }
+  return undefined
+}
+
+/**
  * Fase del flujo de dos escaneos (mismo QR): JC → acopio → completado.
  * Requiere que la etiqueta exista en este dispositivo.
  */
@@ -215,7 +235,9 @@ export function getOperationalPhase(
   const id = labelId.trim().toUpperCase()
   const label = getLabelById(id)
   if (!label) return 'not_found'
-  const hasJc = movementsForLabel(id).some((m) => m.type === 'jc')
+  const hasJc =
+    movementsForLabel(id).some((m) => m.type === 'jc') ||
+    (label.cantidadTotes !== null && label.cantidadTotes !== undefined)
   const hasAcopio = movementsForLabel(id).some((m) => m.type === 'acopio')
   if (!hasJc) return 'jc'
   if (!hasAcopio) return 'acopio'

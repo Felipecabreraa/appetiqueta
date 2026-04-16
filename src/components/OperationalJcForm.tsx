@@ -118,8 +118,9 @@ export function OperationalJcForm({
           <p className="operational-eyebrow">Salida de campo</p>
           <h1 className="operational-title">Registro JC</h1>
           <p className="operational-lead">
-            Confirme los totes que salen y el jefe de cuadrilla. La fecha y hora se guardan al pulsar
-            Guardar.
+            Confirme los totes que salen y el jefe de cuadrilla. Al pulsar Guardar, el registro se
+            escribe en la base de datos del servidor y queda copiado en este teléfono (requiere
+            conexión a internet).
           </p>
         </header>
 

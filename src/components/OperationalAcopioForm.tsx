@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LabelRecord, Movement } from '../types'
-import {
-  addMovement,
-  firstMovementOfType,
-  getOperationalPhase,
-} from '../lib/storage'
+import { addMovement, firstJcForLabel, getOperationalPhase } from '../lib/storage'
 import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 export function OperationalAcopioForm({
@@ -14,10 +10,7 @@ export function OperationalAcopioForm({
   label: LabelRecord
   onSaved: () => void
 }) {
-  const firstJc = useMemo(
-    () => firstMovementOfType(label.id, 'jc'),
-    [label.id],
-  )
+  const firstJc = useMemo(() => firstJcForLabel(label), [label])
 
   const [llegada, setLlegada] = useState<number | ''>('')
   const [operador, setOperador] = useState(() => getStoredOperatorName())
@@ -95,7 +88,8 @@ export function OperationalAcopioForm({
           <p className="operational-eyebrow">Llegada al acopio</p>
           <h1 className="operational-title">Registro en acopio</h1>
           <p className="operational-lead">
-            Ingrese la cantidad de totes recibidos. La fecha y hora se guardan al pulsar Guardar.
+            Ingrese la cantidad de totes recibidos. Al pulsar Guardar, el registro se escribe en la
+            base de datos del servidor y queda copiado en este teléfono.
           </p>
         </header>
 
