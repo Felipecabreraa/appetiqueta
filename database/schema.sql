@@ -128,6 +128,18 @@ CREATE TABLE IF NOT EXISTS csg_catalog (
   UNIQUE KEY uq_csg_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS jc_foremen (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code VARCHAR(60) NOT NULL,
+  name VARCHAR(180) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_jc_foremen_code (code),
+  UNIQUE KEY uq_jc_foremen_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Relación maestra por temporada:
 -- Empresa + CC -> Especie + Variedad + CSG
 CREATE TABLE IF NOT EXISTS season_cost_centers (

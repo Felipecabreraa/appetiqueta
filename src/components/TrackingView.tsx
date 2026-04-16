@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
+import { fetchJcForemen } from '../lib/masterDataApi'
 import {
   addMovement,
   getLabelById,
@@ -34,6 +35,8 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [tipo, setTipo] = useState<MovementType>('jc')
   const [cantidad, setCantidad] = useState<number>(0)
   const [jefeCuadrilla, setJefeCuadrilla] = useState('')
+  const [jefesCuadrilla, setJefesCuadrilla] = useState<Array<{ id: number; name: string }>>([])
+  const [jefesCuadrillaError, setJefesCuadrillaError] = useState<string | null>(null)
   const [, setTick] = useState(0)
   const [msg, setMsg] = useState<string | null>(null)
   const [msgTone, setMsgTone] = useState<'ok' | 'err' | null>(null)
@@ -49,6 +52,28 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     declaradoEnEtiqueta != null ? totals.jc - declaradoEnEtiqueta : null
   const recent = getLabels().slice(0, 12)
   const allMovements = getMovements()
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchJcForemen()
+      .then((rows) => {
+        if (!cancelled) {
+          setJefesCuadrilla(rows)
+          setJefesCuadrillaError(null)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setJefesCuadrilla([])
+          setJefesCuadrillaError(
+            error instanceof Error ? error.message : 'No se pudo cargar jefes de cuadrilla.',
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function register() {
     setMsg(null)
@@ -181,7 +206,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                 </span>
               ) : null}
               <input
-                type="text"
+                list="jc-foremen-list"
                 value={jefeCuadrilla}
                 onChange={(e) => setJefeCuadrilla(e.target.value)}
                 placeholder={
@@ -191,6 +216,16 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                 }
                 autoComplete="off"
               />
+              <datalist id="jc-foremen-list">
+                {jefesCuadrilla.map((item) => (
+                  <option key={item.id} value={item.name} />
+                ))}
+              </datalist>
+              {jefesCuadrillaError ? (
+                <span className="field-optional-hint muted">
+                  No se pudo cargar la lista de maestros; puede escribir el nombre manualmente.
+                </span>
+              ) : null}
             </label>
           )}
           <button type="button" className="btn primary" onClick={register}>

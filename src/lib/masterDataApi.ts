@@ -3,10 +3,12 @@ import type {
   CostCenterOption,
   MasterCompany,
   MasterCsg,
+  MasterJcForeman,
   MasterRelation,
   MasterSeason,
   MasterSpecies,
   MasterVariety,
+  JcForemanOption,
   SeasonOption,
 } from '../types'
 import { apiFetch } from './apiClient'
@@ -78,6 +80,7 @@ export async function fetchMasterAdminData(): Promise<{
   companies: MasterCompany[]
   species: MasterSpecies[]
   csg: MasterCsg[]
+  jcForemen: MasterJcForeman[]
   varieties: MasterVariety[]
   relations: MasterRelation[]
 }> {
@@ -140,6 +143,19 @@ export async function upsertCsg(payload: {
   await parseOrThrow(res)
 }
 
+export async function upsertJcForeman(payload: {
+  id?: number
+  code: string
+  name: string
+  isActive?: boolean
+}): Promise<void> {
+  const res = await apiFetch('/api/admin/jc-foremen', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  await parseOrThrow(res)
+}
+
 export async function upsertVariety(payload: {
   id?: number
   code: string
@@ -152,6 +168,12 @@ export async function upsertVariety(payload: {
     body: JSON.stringify(payload),
   })
   await parseOrThrow(res)
+}
+
+export async function fetchJcForemen(): Promise<JcForemanOption[]> {
+  const res = await apiFetch('/api/master-data/jc-foremen')
+  const data = await parseOrThrow<{ foremen?: JcForemanOption[] }>(res)
+  return data.foremen || []
 }
 
 export async function upsertRelation(payload: {

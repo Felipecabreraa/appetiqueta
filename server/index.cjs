@@ -114,6 +114,20 @@ async function createPool() {
 
 async function ensureBaseData(pool) {
   await pool.execute(
+    `CREATE TABLE IF NOT EXISTS jc_foremen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      code VARCHAR(60) NOT NULL,
+      name VARCHAR(180) NOT NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_jc_foremen_code (code),
+      UNIQUE KEY uq_jc_foremen_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  )
+
+  await pool.execute(
     `INSERT INTO roles (code, name, description)
      VALUES
        ('superadmin', 'SuperAdmin', 'Control total del sistema'),
@@ -415,6 +429,11 @@ async function fetchMastersBundle(pool) {
      FROM csg_catalog
      ORDER BY name`,
   )
+  const [jcForemen] = await pool.execute(
+    `SELECT id, code, name, is_active
+     FROM jc_foremen
+     ORDER BY name`,
+  )
   const [varieties] = await pool.execute(
     `SELECT v.id, v.code, v.name, v.species_id, s.name AS species_name, v.is_active
      FROM varieties v
@@ -438,7 +457,7 @@ async function fetchMastersBundle(pool) {
      INNER JOIN csg_catalog cs ON cs.id = scc.csg_id
      ORDER BY se.code DESC, c.name, scc.center_code`,
   )
-  return { seasons, companies, species, csg, varieties, relations }
+  return { seasons, companies, species, csg, jcForemen, varieties, relations }
 }
 
 function buildLabelSchemaState(existingColumns) {
@@ -715,6 +734,22 @@ async function main() {
     }
   })
 
+  app.get('/api/master-data/jc-foremen', authMiddleware, requireRoles(...ACCESS.CATALOG), async (_req, res) => {
+    if (!requireDb(pool, res)) return
+    try {
+      const [rows] = await pool.execute(
+        `SELECT id, name
+         FROM jc_foremen
+         WHERE is_active = 1
+         ORDER BY name`,
+      )
+      return res.json({ ok: true, foremen: rows })
+    } catch (error) {
+      console.error('[sync-api] GET /api/master-data/jc-foremen', error)
+      return res.status(500).json({ ok: false, error: 'db' })
+    }
+  })
+
   app.post(
     '/api/master-data/import',
     authMiddleware,
@@ -947,6 +982,40 @@ async function main() {
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/csg', error)
+        return res.status(500).json({ ok: false, error: 'db' })
+      }
+    },
+  )
+
+  app.post(
+    '/api/admin/jc-foremen',
+    authMiddleware,
+    requireRoles(...ACCESS.MASTER_ADMIN),
+    async (req, res) => {
+      if (!requireDb(pool, res)) return
+      const id = Number(req.body?.id || 0) || null
+      const code = normalizeMasterName(req.body?.code)
+      const name = normalizeMasterName(req.body?.name)
+      if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
+      const isActive = toBit(req.body?.isActive, 1)
+      try {
+        if (id) {
+          await pool.execute(`UPDATE jc_foremen SET code = ?, name = ?, is_active = ? WHERE id = ?`, [
+            code,
+            name,
+            isActive,
+            id,
+          ])
+        } else {
+          await pool.execute(`INSERT INTO jc_foremen (code, name, is_active) VALUES (?, ?, ?)`, [
+            code,
+            name,
+            isActive,
+          ])
+        }
+        return res.json({ ok: true })
+      } catch (error) {
+        console.error('[sync-api] POST /api/admin/jc-foremen', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
     },

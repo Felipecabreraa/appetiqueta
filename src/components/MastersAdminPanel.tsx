@@ -4,6 +4,7 @@ import {
   fetchMasterAdminData,
   upsertCompany,
   upsertCsg,
+  upsertJcForeman,
   upsertRelation,
   upsertSeason,
   upsertSpecies,
@@ -12,6 +13,7 @@ import {
 import type {
   MasterCompany,
   MasterCsg,
+  MasterJcForeman,
   MasterRelation,
   MasterSeason,
   MasterSpecies,
@@ -30,6 +32,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   const [companies, setCompanies] = useState<MasterCompany[]>([])
   const [species, setSpecies] = useState<MasterSpecies[]>([])
   const [csg, setCsg] = useState<MasterCsg[]>([])
+  const [jcForemen, setJcForemen] = useState<MasterJcForeman[]>([])
   const [varieties, setVarieties] = useState<MasterVariety[]>([])
   const [relations, setRelations] = useState<MasterRelation[]>([])
 
@@ -45,6 +48,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   const [companyForm, setCompanyForm] = useState({ id: 0, code: '', name: '', isActive: true })
   const [speciesForm, setSpeciesForm] = useState({ id: 0, code: '', name: '', isActive: true })
   const [csgForm, setCsgForm] = useState({ id: 0, code: '', name: '', isActive: true })
+  const [jcForemanForm, setJcForemanForm] = useState({ id: 0, code: '', name: '', isActive: true })
   const [varietyForm, setVarietyForm] = useState({
     id: 0,
     code: '',
@@ -78,6 +82,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
       setCompanies(data.companies)
       setSpecies(data.species)
       setCsg(data.csg)
+      setJcForemen(data.jcForemen || [])
       setVarieties(data.varieties)
       setRelations(data.relations)
     } catch (e) {
@@ -124,6 +129,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         </button>
         <button type="button" className="masters-jump-link" onClick={jump('maestro-csg')}>
           CSG
+        </button>
+        <button type="button" className="masters-jump-link" onClick={jump('maestro-jc-foremen')}>
+          Jefes de cuadrilla
         </button>
         <button type="button" className="masters-jump-link" onClick={jump('maestro-variedades')}>
           Variedades
@@ -264,6 +272,35 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         onEdit={(id) => {
           const item = csg.find((x) => x.id === id)
           if (item) setCsgForm({ id: item.id, code: item.code, name: item.name, isActive: Boolean(item.is_active) })
+        }}
+      />
+
+      <h3 id="maestro-jc-foremen" className="masters-section-title" tabIndex={-1}>
+        Jefes de cuadrilla
+      </h3>
+      <SimpleMasterForm
+        busy={busy}
+        title="Jefe de cuadrilla"
+        form={jcForemanForm}
+        setForm={setJcForemanForm}
+        onSave={() =>
+          upsertJcForeman(jcForemanForm).then(() => {
+            setOk('Jefe de cuadrilla guardado.')
+            setJcForemanForm({ id: 0, code: '', name: '', isActive: true })
+            return reload()
+          })
+        }
+        rows={jcForemen.map((x) => ({ id: x.id, code: x.code, name: x.name, active: x.is_active }))}
+        onEdit={(id) => {
+          const item = jcForemen.find((x) => x.id === id)
+          if (item) {
+            setJcForemanForm({
+              id: item.id,
+              code: item.code,
+              name: item.name,
+              isActive: Boolean(item.is_active),
+            })
+          }
         }}
       />
 

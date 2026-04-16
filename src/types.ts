@@ -80,6 +80,13 @@ export interface MasterCsg {
   is_active: number
 }
 
+export interface MasterJcForeman {
+  id: number
+  code: string
+  name: string
+  is_active: number
+}
+
 export interface MasterVariety {
   id: number
   code: string
@@ -116,4 +123,9 @@ export interface Movement {
   at: string
   /** Nombre u operador opcional (flujo por QR); persiste en este dispositivo. */
   registeredBy?: string
+}
+
+export interface JcForemanOption {
+  id: number
+  name: string
 }
