@@ -22,7 +22,6 @@ const ROLE = {
 const ACCESS = {
   CATALOG: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
   LABEL_BATCH: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
-  MOVEMENT_WRITE: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
   TRACKING_EXPORT: [ROLE.SUPERADMIN, ROLE.ADMIN],
   MASTER_ADMIN: [ROLE.SUPERADMIN],
 }
@@ -206,38 +205,62 @@ function requireDb(pool, res) {
   return false
 }
 
-async function authMiddleware(req, res, next) {
-  const pool = req.app.locals.pool
-  if (!pool) return res.status(503).json({ ok: false, error: 'db_not_configured' })
+/**
+ * Resuelve sesión Bearer si el token es válido; si no hay token o es inválido devuelve null.
+ */
+async function resolveBearerAuth(pool, req) {
   const header = req.get('authorization') || ''
   const match = header.match(/^Bearer\s+(.+)$/i)
   const token = match?.[1]?.trim()
-  if (!token) return res.status(401).json({ ok: false, error: 'missing_token' })
+  if (!token) return null
+  const tokenHash = hashToken(token)
+  const [rows] = await pool.execute(
+    `SELECT s.id AS session_id, s.user_id, s.expires_at, u.username, u.full_name, u.is_active, r.code AS role
+     FROM auth_sessions s
+     INNER JOIN users u ON u.id = s.user_id
+     INNER JOIN roles r ON r.id = u.role_id
+     WHERE s.token_hash = ? AND s.expires_at > NOW(3)
+     LIMIT 1`,
+    [tokenHash],
+  )
+  const row = rows[0]
+  if (!row || Number(row.is_active) !== 1) return null
+  return {
+    sessionId: row.session_id,
+    userId: row.user_id,
+    username: row.username,
+    fullName: row.full_name,
+    role: row.role,
+  }
+}
+
+async function authMiddleware(req, res, next) {
+  const pool = req.app.locals.pool
+  if (!pool) return res.status(503).json({ ok: false, error: 'db_not_configured' })
   try {
-    const tokenHash = hashToken(token)
-    const [rows] = await pool.execute(
-      `SELECT s.id AS session_id, s.user_id, s.expires_at, u.username, u.full_name, u.is_active, r.code AS role
-       FROM auth_sessions s
-       INNER JOIN users u ON u.id = s.user_id
-       INNER JOIN roles r ON r.id = u.role_id
-       WHERE s.token_hash = ? AND s.expires_at > NOW(3)
-       LIMIT 1`,
-      [tokenHash],
-    )
-    const row = rows[0]
-    if (!row || Number(row.is_active) !== 1) {
-      return res.status(401).json({ ok: false, error: 'invalid_session' })
+    const auth = await resolveBearerAuth(pool, req)
+    if (!auth) {
+      const header = req.get('authorization') || ''
+      const hasBearer = /^Bearer\s+\S+/i.test(header)
+      return res.status(401).json({ ok: false, error: hasBearer ? 'invalid_session' : 'missing_token' })
     }
-    req.auth = {
-      sessionId: row.session_id,
-      userId: row.user_id,
-      username: row.username,
-      fullName: row.full_name,
-      role: row.role,
-    }
+    req.auth = auth
     next()
   } catch (error) {
     console.error('[sync-api] auth middleware', error)
+    res.status(500).json({ ok: false, error: 'db' })
+  }
+}
+
+/** Para rutas usadas desde el flujo QR (?e=) sin login: no exige token. */
+async function optionalAuthMiddleware(req, res, next) {
+  const pool = req.app.locals.pool
+  if (!pool) return res.status(503).json({ ok: false, error: 'db_not_configured' })
+  try {
+    req.auth = await resolveBearerAuth(pool, req)
+    next()
+  } catch (error) {
+    console.error('[sync-api] optionalAuth middleware', error)
     res.status(500).json({ ok: false, error: 'db' })
   }
 }
@@ -1208,7 +1231,8 @@ async function main() {
     }
   })
 
-  app.post('/api/movements', authMiddleware, requireRoles(...ACCESS.MOVEMENT_WRITE), async (req, res) => {
+  // Escaneo en terreno (?e=): sin sesión; si hay Bearer válido se guarda created_by.
+  app.post('/api/movements', optionalAuthMiddleware, async (req, res) => {
     if (!requireDb(pool, res)) return
     const payload = normalizeMovementInput(req.body?.movement || req.body)
     if (!payload) {
@@ -1252,7 +1276,7 @@ async function main() {
           payload.cantidad,
           payload.at,
           payload.registeredBy,
-          req.auth.userId,
+          req.auth?.userId ?? null,
         ],
       )
       await conn.commit()
