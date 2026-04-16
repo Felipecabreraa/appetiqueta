@@ -1214,12 +1214,36 @@ async function main() {
     if (!payload) {
       return res.status(400).json({ ok: false, error: 'invalid_movement' })
     }
+    const conn = await pool.getConnection()
     try {
-      const [labelRows] = await pool.execute('SELECT id FROM labels WHERE id = ? LIMIT 1', [payload.labelId])
+      await conn.beginTransaction()
+      const [labelRows] = await conn.execute(
+        'SELECT id, cantidad_totes FROM labels WHERE id = ? FOR UPDATE',
+        [payload.labelId],
+      )
       if (!labelRows.length) {
+        await conn.rollback()
         return res.status(404).json({ ok: false, error: 'label_not_found' })
       }
-      await pool.execute(
+      const labelRow = labelRows[0]
+      const needsJcFirst =
+        payload.type === 'jc' &&
+        (labelRow.cantidad_totes === null || labelRow.cantidad_totes === undefined)
+      if (needsJcFirst) {
+        const jefe = normalizeLimitedText(
+          req.body?.jcFirstRead?.jefeCuadrilla ?? req.body?.jefeCuadrilla,
+          255,
+        )
+        if (!jefe) {
+          await conn.rollback()
+          return res.status(400).json({ ok: false, error: 'jc_first_read_required' })
+        }
+        await conn.execute(
+          `UPDATE labels SET cantidad_totes = ?, jefe_cuadrilla = ? WHERE id = ?`,
+          [payload.cantidad, jefe, payload.labelId],
+        )
+      }
+      await conn.execute(
         `INSERT INTO movements (label_id, type, cantidad, at, registered_by, created_by)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
@@ -1231,13 +1255,21 @@ async function main() {
           req.auth.userId,
         ],
       )
+      await conn.commit()
       return res.json({ ok: true })
     } catch (error) {
+      try {
+        await conn.rollback()
+      } catch {
+        /* ignore */
+      }
       if (error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE') {
         return res.status(503).json({ ok: false, error: 'movements_table_missing' })
       }
       console.error('[sync-api] POST /api/movements', error)
       return res.status(500).json({ ok: false, error: 'db' })
+    } finally {
+      conn.release()
     }
   })
 

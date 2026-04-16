@@ -60,7 +60,7 @@ export function OperationalJcForm({
     return () => window.clearTimeout(t)
   }, [])
 
-  function submit() {
+  async function submit() {
     setErr(null)
     if (getOperationalPhase(label.id) !== 'jc') {
       setErr('El estado de la etiqueta cambió. Vuelva a escanear el QR.')
@@ -80,10 +80,6 @@ export function OperationalJcForm({
       setStoredOperatorName(operador)
       const at = new Date().toISOString()
       const by = operador.trim() || undefined
-      updateLabelRecord(label.id, {
-        cantidadTotes: totes,
-        jefeCuadrilla: j,
-      })
       const movement: Movement = {
         labelId: label.id,
         type: 'jc',
@@ -91,8 +87,20 @@ export function OperationalJcForm({
         at,
         registeredBy: by,
       }
+      const jcFirstRead = label.cantidadTotes === null ? { jefeCuadrilla: j } : undefined
+      const pushed = await pushMovementToServer(
+        movement,
+        jcFirstRead ? { jcFirstRead } : undefined,
+      )
+      if (!pushed.ok) {
+        setErr(pushed.error)
+        return
+      }
+      updateLabelRecord(label.id, {
+        cantidadTotes: totes,
+        jefeCuadrilla: j,
+      })
       addMovement(movement)
-      void pushMovementToServer(movement)
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo guardar.')
@@ -208,7 +216,7 @@ export function OperationalJcForm({
           <button
             type="button"
             className="operational-btn operational-btn--primary"
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={busy}
           >
             Guardar salida

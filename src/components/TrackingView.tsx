@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
+import { getStoredOperatorName } from '../lib/operatorProfile'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
 import { fetchJcForemen } from '../lib/masterDataApi'
@@ -47,6 +48,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [msgTone, setMsgTone] = useState<'ok' | 'err' | null>(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [excelBusy, setExcelBusy] = useState(false)
+  const [registerBusy, setRegisterBusy] = useState(false)
   const lastBumpedAccessId = useRef<string | null>(null)
 
   const label = code.trim() ? getLabelById(code) : undefined
@@ -124,7 +126,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     }
   }, [])
 
-  function register() {
+  async function register() {
     setMsg(null)
     setMsgTone(null)
     const id = code.trim().toUpperCase()
@@ -179,10 +181,6 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           setMsgTone('err')
           return
         }
-        updateLabelRecord(found.id, {
-          cantidadTotes: cantidad,
-          jefeCuadrilla: jefe,
-        })
       }
     }
 
@@ -191,14 +189,39 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       type: tipo,
       cantidad,
       at: new Date().toISOString(),
+      registeredBy: getStoredOperatorName().trim() || undefined,
     }
-    addMovement(movement)
-    void pushMovementToServer(movement)
-    setTick((t) => t + 1)
-    setMsg(
-      `Registrado: ${TIPO_LABEL[tipo]} — ${cantidad} totes para ${found.id}.`,
-    )
-    setMsgTone('ok')
+    const jcFirstRead =
+      tipo === 'jc' && found.cantidadTotes === null
+        ? { jefeCuadrilla: jefeCuadrilla.trim() }
+        : undefined
+
+    setRegisterBusy(true)
+    try {
+      const pushed = await pushMovementToServer(
+        movement,
+        jcFirstRead ? { jcFirstRead } : undefined,
+      )
+      if (!pushed.ok) {
+        setMsg(pushed.error)
+        setMsgTone('err')
+        return
+      }
+      if (tipo === 'jc' && found.cantidadTotes === null) {
+        updateLabelRecord(found.id, {
+          cantidadTotes: cantidad,
+          jefeCuadrilla: jefeCuadrilla.trim(),
+        })
+      }
+      addMovement(movement)
+      setTick((t) => t + 1)
+      setMsg(
+        `Registrado en servidor: ${TIPO_LABEL[tipo]} — ${cantidad} totes para ${found.id}.`,
+      )
+      setMsgTone('ok')
+    } finally {
+      setRegisterBusy(false)
+    }
   }
 
   return (
@@ -229,6 +252,12 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           </li>
           <li>
             <strong>En acopio:</strong> totes que llegaron.
+          </li>
+          <li>
+            Cada <strong>guardado exitoso</strong> se escribe primero en la <strong>base de datos</strong>{' '}
+            del servidor (tabla de movimientos); el historial en este navegador es una copia local
+            tras confirmar el servidor. Sin conexión o si falla el guardado, el registro{' '}
+            <strong>no</strong> queda en la BD.
           </li>
         </ul>
         {label && flowComplete ? (
@@ -327,10 +356,10 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           <button
             type="button"
             className="btn primary"
-            disabled={Boolean(label && flowComplete)}
-            onClick={register}
+            disabled={Boolean(label && flowComplete) || registerBusy}
+            onClick={() => void register()}
           >
-            Guardar esta lectura
+            {registerBusy ? 'Guardando en servidor…' : 'Guardar esta lectura'}
           </button>
         </div>
         {tipo === 'jc' && label && label.cantidadTotes !== null && (
@@ -494,8 +523,9 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       <section className="card export-excel-card">
         <h2>Exportar a Excel</h2>
         <p className="sub">
-          Un archivo con <strong>dos hojas</strong>: salidas JC y llegadas a acopio, con fechas y datos
-          de cada etiqueta.
+          Un archivo con <strong>dos hojas</strong> (JC y acopio). En cada descarga se consulta de
+          nuevo el servidor y se incluyen <strong>todos los movimientos</strong> que haya en la base
+          en ese instante (desde cualquier celular que ya haya sincronizado).
         </p>
         <div className="export-excel-actions">
           <button
@@ -503,34 +533,31 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             className="btn secondary"
             disabled={!canExportExcel || excelBusy}
             onClick={() => {
-              try {
-                if (!canExportExcel) return
-                setExcelBusy(true)
-                void fetchTrackingExportPayload()
-                  .then((payload) => {
-                    exportTrackingsExcel(undefined, payload)
-                  })
-                  .catch((e) => {
-                    window.alert(e instanceof Error ? e.message : 'Error al exportar')
-                  })
-                  .finally(() => {
-                    setExcelBusy(false)
-                  })
-              } catch (e) {
-                setExcelBusy(false)
-                window.alert(e instanceof Error ? e.message : 'Error al exportar')
-              }
+              if (!canExportExcel) return
+              setExcelBusy(true)
+              void fetchTrackingExportPayload()
+                .then((payload) => {
+                  exportTrackingsExcel(undefined, payload)
+                })
+                .catch((e) => {
+                  window.alert(e instanceof Error ? e.message : 'Error al exportar')
+                })
+                .finally(() => {
+                  setExcelBusy(false)
+                })
             }}
           >
-            {excelBusy ? 'Generando Excel...' : 'Descargar Excel (.xlsx)'}
+            {excelBusy ? 'Consultando la base de datos…' : 'Descargar Excel (.xlsx)'}
           </button>
           {!canExportExcel ? (
             <p className="sub muted export-excel-empty">
-              Solo Admin y Super Admin pueden descargar el archivo Excel.
+              Solo perfiles con acceso administrativo (Admin y Super Admin) pueden descargar este
+              Excel.
             </p>
           ) : allMovements.length === 0 ? (
             <p className="sub muted export-excel-empty">
-              Puede descargar ahora: el archivo se construye con datos globales del servidor.
+              Puede descargar igual: el listado sale de la base de datos (lecturas ya sincronizadas
+              desde cualquier celular).
             </p>
           ) : null}
         </div>

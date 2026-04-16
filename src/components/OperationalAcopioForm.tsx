@@ -31,7 +31,7 @@ export function OperationalAcopioForm({
     return () => window.clearTimeout(t)
   }, [])
 
-  function submit() {
+  async function submit() {
     setErr(null)
     if (getOperationalPhase(label.id) !== 'acopio') {
       setErr('El estado de la etiqueta cambió. Vuelva a escanear el QR.')
@@ -57,8 +57,12 @@ export function OperationalAcopioForm({
         at,
         registeredBy: by,
       }
+      const pushed = await pushMovementToServer(movement)
+      if (!pushed.ok) {
+        setErr(pushed.error)
+        return
+      }
       addMovement(movement)
-      void pushMovementToServer(movement)
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo guardar.')
@@ -139,7 +143,7 @@ export function OperationalAcopioForm({
           <button
             type="button"
             className="operational-btn operational-btn--primary"
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={busy}
           >
             Guardar llegada

@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS labels (
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Lecturas QR (JC + acopio): registro canónico en BD; la app inserta vía POST /api/movements.
 CREATE TABLE IF NOT EXISTS movements (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   label_id VARCHAR(64) NOT NULL,
