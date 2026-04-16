@@ -112,6 +112,49 @@ async function createPool() {
   }
 }
 
+/**
+ * Bases existentes pueden tener `movements` sin columnas nuevas del esquema actual.
+ * Alinea columnas usadas por POST /api/movements y GET tracking-export.
+ */
+async function ensureMovementsSchema(pool) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements'`,
+    )
+    if (!Array.isArray(rows) || rows.length === 0) return
+    const set = new Set(rows.map((r) => r.COLUMN_NAME))
+    if (!set.has('registered_by')) {
+      await pool.execute(
+        `ALTER TABLE movements ADD COLUMN registered_by VARCHAR(120) NOT NULL DEFAULT ''`,
+      )
+      set.add('registered_by')
+    }
+    if (!set.has('created_by')) {
+      await pool.execute(`ALTER TABLE movements ADD COLUMN created_by BIGINT UNSIGNED NULL`)
+      set.add('created_by')
+    }
+    const [idxRows] = await pool.execute(
+      `SELECT 1 AS ok FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND INDEX_NAME = 'idx_movements_created_by'
+       LIMIT 1`,
+    )
+    if ((!Array.isArray(idxRows) || idxRows.length === 0) && set.has('created_by')) {
+      try {
+        await pool.execute(`ALTER TABLE movements ADD KEY idx_movements_created_by (created_by)`)
+      } catch (err) {
+        if (!(err && typeof err === 'object' && err.code === 'ER_DUP_KEYNAME')) {
+          console.warn('[sync-api] ensureMovementsSchema índice created_by:', err.message || err)
+        }
+      }
+    }
+  } catch (error) {
+    const code = error && typeof error === 'object' ? error.code : ''
+    if (code === 'ER_NO_SUCH_TABLE') return
+    console.warn('[sync-api] ensureMovementsSchema:', error.message || error)
+  }
+}
+
 async function ensureBaseData(pool) {
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS jc_foremen (
@@ -539,6 +582,7 @@ async function main() {
   if (pool) {
     try {
       await ensureBaseData(pool)
+      await ensureMovementsSchema(pool)
       labelSchema = await detectLabelSchema(pool)
     } catch (error) {
       console.error('[sync-api] Error inicializando datos base en MySQL:', error)
@@ -734,7 +778,9 @@ async function main() {
     }
   })
 
-  app.get('/api/master-data/jc-foremen', authMiddleware, requireRoles(...ACCESS.CATALOG), async (_req, res) => {
+  // Lectura pública: el flujo operativo (?e=) no exige login; sin token la lista quedaba vacía.
+  // Solo expone id + nombre de jefes activos (mismo SELECT que antes con sesión).
+  app.get('/api/master-data/jc-foremen', async (_req, res) => {
     if (!requireDb(pool, res)) return
     try {
       const [rows] = await pool.execute(

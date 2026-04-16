@@ -201,6 +201,19 @@
   color: var(--warn-text, #92400e);
 }
 
+.operational-link-btn {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .operational-feedback {
   margin: 0;
   font-size: 0.9rem;

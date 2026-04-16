@@ -22,15 +22,27 @@ export function OperationalJcForm({
   const [busy, setBusy] = useState(false)
   const [jefesMaestro, setJefesMaestro] = useState<Array<{ id: number; name: string }>>([])
   const [jefesMaestroLoading, setJefesMaestroLoading] = useState(true)
+  const [jefesMaestroError, setJefesMaestroError] = useState<string | null>(null)
+  const [jefesMaestroReloadKey, setJefesMaestroReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setJefesMaestroLoading(true)
+    setJefesMaestroError(null)
     void fetchJcForemen()
       .then((rows) => {
-        if (!cancelled) setJefesMaestro(rows)
+        if (!cancelled) {
+          setJefesMaestro(rows)
+          setJefesMaestroError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelled) setJefesMaestro([])
+      .catch((e) => {
+        if (!cancelled) {
+          setJefesMaestro([])
+          setJefesMaestroError(
+            e instanceof Error ? e.message : 'No se pudo cargar el listado de jefes de cuadrilla.',
+          )
+        }
       })
       .finally(() => {
         if (!cancelled) setJefesMaestroLoading(false)
@@ -38,7 +50,7 @@ export function OperationalJcForm({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [jefesMaestroReloadKey])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -129,6 +141,18 @@ export function OperationalJcForm({
 
             <label className="operational-field">
               <span className="operational-label">Jefe de cuadrilla</span>
+              {!jefesMaestroLoading && jefesMaestroError ? (
+                <p className="operational-hint operational-hint--warn" role="status">
+                  {jefesMaestroError}{' '}
+                  <button
+                    type="button"
+                    className="operational-link-btn"
+                    onClick={() => setJefesMaestroReloadKey((k) => k + 1)}
+                  >
+                    Reintentar
+                  </button>
+                </p>
+              ) : null}
               {jefesMaestroLoading ? (
                 <select className="operational-input" disabled value="">
                   <option value="">Cargando lista…</option>
@@ -153,7 +177,11 @@ export function OperationalJcForm({
                   className="operational-input"
                   value={jefe}
                   onChange={(e) => setJefe(e.target.value)}
-                  placeholder="Nombre (no hay maestro o sin conexión)"
+                  placeholder={
+                    jefesMaestroError
+                      ? 'Escriba el nombre a mano o pulse Reintentar'
+                      : 'Escriba el nombre (no hay jefes activos en maestro)'
+                  }
                   autoComplete="name"
                 />
               )}
