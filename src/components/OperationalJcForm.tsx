@@ -119,8 +119,8 @@ export function OperationalJcForm({
           <h1 className="operational-title">Registro JC</h1>
           <p className="operational-lead">
             Confirme los totes que salen y el jefe de cuadrilla. Al pulsar Guardar, el registro se
-            escribe en la base de datos del servidor y queda copiado en este teléfono (requiere
-            conexión a internet).
+            escribe <strong>en la base de datos</strong> (obligatorio para el reporte Excel JC /
+            acopio) y queda copiado en este teléfono; espere conexión hasta que no aparezca error.
           </p>
         </header>
 

@@ -107,7 +107,8 @@ function sheetFromRows(
 
 /**
  * Libro .xlsx con dos hojas: JC (primera lectura QR) y Acopio (segunda lectura QR).
- * Para el reporte global, pasar `source` desde GET /api/reports/tracking-export (toda la BD).
+ * Reporte global: pasar `source` desde GET /api/reports/tracking-export (solo datos persistidos en MySQL).
+ * Sin `source`, usa solo lo que haya en localStorage (no sustituye al flujo operativo con servidor).
  */
 export function exportTrackingsExcel(fileName?: string, source?: TrackingsExportData): void {
   const movements = source?.movements ?? getMovements()

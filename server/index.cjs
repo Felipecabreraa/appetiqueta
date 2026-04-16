@@ -1232,6 +1232,7 @@ async function main() {
   })
 
   // Escaneo en terreno (?e=): sin sesión; si hay Bearer válido se guarda created_by.
+  // Fuente del Excel global (GET /api/reports/tracking-export): solo filas insertadas aquí.
   app.post('/api/movements', optionalAuthMiddleware, async (req, res) => {
     if (!requireDb(pool, res)) return
     const payload = normalizeMovementInput(req.body?.movement || req.body)

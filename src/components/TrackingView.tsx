@@ -523,9 +523,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       <section className="card export-excel-card">
         <h2>Exportar a Excel</h2>
         <p className="sub">
-          Un archivo con <strong>dos hojas</strong> (JC y acopio). En cada descarga se consulta de
-          nuevo el servidor y se incluyen <strong>todos los movimientos</strong> que haya en la base
-          en ese instante (desde cualquier celular que ya haya sincronizado).
+          Un archivo con <strong>dos hojas</strong> (JC y acopio). <strong>Solo</strong> se listan
+          filas guardadas en la <strong>base de datos</strong> (lecturas confirmadas por el
+          servidor). El flujo correcto es registrar cada escaneo con el <strong>QR en terreno</strong>{' '}
+          o con este formulario, siempre con conexión hasta ver el mensaje de guardado; así el
+          Excel refleja el circuito real JC → acopio.
         </p>
         <div className="export-excel-actions">
           <button

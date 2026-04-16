@@ -88,8 +88,9 @@ export function OperationalAcopioForm({
           <p className="operational-eyebrow">Llegada al acopio</p>
           <h1 className="operational-title">Registro en acopio</h1>
           <p className="operational-lead">
-            Ingrese la cantidad de totes recibidos. Al pulsar Guardar, el registro se escribe en la
-            base de datos del servidor y queda copiado en este teléfono.
+            Ingrese la cantidad de totes recibidos. Al pulsar Guardar, el registro se escribe{' '}
+            <strong>en la base de datos</strong> (obligatorio para el reporte Excel JC / acopio) y
+            queda copiado en este teléfono; espere conexión hasta que no aparezca error.
           </p>
         </header>
 
