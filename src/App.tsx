@@ -477,27 +477,6 @@ function App() {
           )}
         </main>
 
-        <footer className="app-footer no-print">
-          <details className="footer-help">
-            <summary>Ayuda: escaneo del QR y dónde se guardan los datos</summary>
-            <div className="footer-help-body">
-              <p>
-                El QR abre la app con <code>?e=CÓDIGO</code>: en celular solo verán el formulario de
-                salida JC o de llegada a acopio, según corresponda, sin menús. El escritorio permite
-                administración y registro manual en el mismo navegador.
-              </p>
-              <p>
-                Los datos viven en <strong>este navegador en este equipo</strong>. Para el celular:
-                ejecute <code>npm run server</code> (API Node + MySQL con las mismas variables{' '}
-                <code>MYSQL_*</code> del <code>.env</code>). En desarrollo, Vite enruta{' '}
-                <code>/api</code> al puerto 3001; solo si el API está en otro host use{' '}
-                <code>VITE_SYNC_API_BASE=http://IP:3001</code>. Al generar etiquetas se guardan en la
-                BD y al escanear el QR el móvil las descarga. Opcional: <code>VITE_LABEL_LOOKUP_URL</code>{' '}
-                con <code>{'{{id}}'}</code> si usa otro backend (p. ej. PHP).
-              </p>
-            </div>
-          </details>
-        </footer>
       </AppShell>
     </div>
   )
