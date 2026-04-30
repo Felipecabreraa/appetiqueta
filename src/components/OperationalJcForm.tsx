@@ -5,7 +5,6 @@ import {
   getOperationalPhase,
   updateLabelRecord,
 } from '../lib/storage'
-import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 import { fetchJcForemen } from '../lib/masterDataApi'
 export function OperationalJcForm({
@@ -17,7 +16,7 @@ export function OperationalJcForm({
 }) {
   const [totes, setTotes] = useState<number>(0)
   const [jefe, setJefe] = useState('')
-  const [operador, setOperador] = useState(() => getStoredOperatorName())
+  const [precioClp, setPrecioClp] = useState<number | ''>('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [jefesMaestro, setJefesMaestro] = useState<Array<{ id: number; name: string }>>([])
@@ -75,17 +74,19 @@ export function OperationalJcForm({
       setErr('Ingrese el jefe de cuadrilla.')
       return
     }
+    if (precioClp === '' || !Number.isFinite(precioClp) || precioClp < 0) {
+      setErr('Ingrese un precio válido en CLP.')
+      return
+    }
     setBusy(true)
     try {
-      setStoredOperatorName(operador)
       const at = new Date().toISOString()
-      const by = operador.trim() || undefined
       const movement: Movement = {
         labelId: label.id,
         type: 'jc',
         cantidad: totes,
         at,
-        registeredBy: by,
+        precioClp: Math.floor(precioClp),
       }
       const jcFirstRead = label.cantidadTotes === null ? { jefeCuadrilla: j } : undefined
       const pushed = await pushMovementToServer(
@@ -197,13 +198,19 @@ export function OperationalJcForm({
             </label>
 
             <label className="operational-field">
-              <span className="operational-label">Operador (opcional)</span>
+              <span className="operational-label">Precio (CLP)</span>
               <input
-                type="text"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
                 className="operational-input"
-                value={operador}
-                onChange={(e) => setOperador(e.target.value)}
-                placeholder="Se recuerda en este dispositivo"
+                value={precioClp === '' ? '' : precioClp}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setPrecioClp(v === '' ? '' : Number(v))
+                }}
+                placeholder="$ CLP"
                 autoComplete="off"
               />
             </label>

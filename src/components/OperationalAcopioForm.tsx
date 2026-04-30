@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LabelRecord, Movement } from '../types'
 import { addMovement, firstJcForLabel, getOperationalPhase } from '../lib/storage'
-import { getStoredOperatorName, setStoredOperatorName } from '../lib/operatorProfile'
 import { pushMovementToServer } from '../lib/pushMovementToServer'
 export function OperationalAcopioForm({
   label,
@@ -13,7 +12,6 @@ export function OperationalAcopioForm({
   const firstJc = useMemo(() => firstJcForLabel(label), [label])
 
   const [llegada, setLlegada] = useState<number | ''>('')
-  const [operador, setOperador] = useState(() => getStoredOperatorName())
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -40,15 +38,12 @@ export function OperationalAcopioForm({
     }
     setBusy(true)
     try {
-      setStoredOperatorName(operador)
       const at = new Date().toISOString()
-      const by = operador.trim() || undefined
       const movement: Movement = {
         labelId: label.id,
         type: 'acopio',
         cantidad: llegada as number,
         at,
-        registeredBy: by,
       }
       const pushed = await pushMovementToServer(movement)
       if (!pushed.ok) {
@@ -112,18 +107,6 @@ export function OperationalAcopioForm({
                   const v = e.target.value
                   setLlegada(v === '' ? '' : Number(v))
                 }}
-                autoComplete="off"
-              />
-            </label>
-
-            <label className="operational-field">
-              <span className="operational-label">Operador (opcional)</span>
-              <input
-                type="text"
-                className="operational-input"
-                value={operador}
-                onChange={(e) => setOperador(e.target.value)}
-                placeholder="Se recuerda en este dispositivo"
                 autoComplete="off"
               />
             </label>

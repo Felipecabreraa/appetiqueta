@@ -62,7 +62,7 @@ function movementToJcRow(
     'Centro costo': s.centroCosto,
     'Totes grabados en etiqueta': s.totesEtiqueta,
     'Jefe cuadrilla (etiqueta)': s.jefe,
-    Operador: m.registeredBy?.trim() || '',
+    'Precio (CLP)': m.precioClp ?? '',
     'Fecha ISO (evento)': m.at,
   }
 }
@@ -90,7 +90,7 @@ function movementToAcopioRow(
     'Centro costo': s.centroCosto,
     'Totes grabados en etiqueta': s.totesEtiqueta,
     'Jefe cuadrilla (etiqueta)': s.jefe,
-    Operador: m.registeredBy?.trim() || '',
+    'Precio (CLP)': m.precioClp ?? '',
     'Fecha ISO (evento)': m.at,
   }
 }

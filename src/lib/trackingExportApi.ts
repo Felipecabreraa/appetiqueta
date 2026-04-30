@@ -51,12 +51,18 @@ export function normalizeMovementRow(raw: unknown): Movement | null {
   if (!labelId || (type !== 'jc' && type !== 'acopio') || !Number.isFinite(cantidad) || !at) {
     return null
   }
+  const rawPrecio = o.precioClp ?? o.precio_clp
+  const precio =
+    rawPrecio === null || rawPrecio === undefined || rawPrecio === ''
+      ? undefined
+      : Number(rawPrecio)
   return {
     labelId,
     type,
     cantidad,
     at,
     registeredBy: String(o.registeredBy || o.registered_by || ''),
+    precioClp: typeof precio === 'number' && Number.isFinite(precio) ? Math.floor(precio) : undefined,
   }
 }
 

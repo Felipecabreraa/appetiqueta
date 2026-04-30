@@ -123,6 +123,8 @@ export interface Movement {
   at: string
   /** Nombre u operador opcional (flujo por QR); persiste en este dispositivo. */
   registeredBy?: string
+  /** Precio de respaldo en pesos CLP (solo se usa en primer trackeo JC). */
+  precioClp?: number
 }
 
 export interface JcForemanOption {
