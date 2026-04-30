@@ -93,7 +93,7 @@ export function OperationalJcForm({
         movement,
         jcFirstRead ? { jcFirstRead } : undefined,
       )
-      if (!pushed.ok) {
+      if (pushed.ok === false) {
         setErr(pushed.error)
         return
       }
