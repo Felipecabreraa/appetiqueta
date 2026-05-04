@@ -137,6 +137,10 @@ async function ensureMovementsSchema(pool) {
       await pool.execute(`ALTER TABLE movements ADD COLUMN precio_clp INT UNSIGNED NULL`)
       set.add('precio_clp')
     }
+    if (!set.has('jh')) {
+      await pool.execute(`ALTER TABLE movements ADD COLUMN jh INT UNSIGNED NULL`)
+      set.add('jh')
+    }
     const [idxRows] = await pool.execute(
       `SELECT 1 AS ok FROM information_schema.STATISTICS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND INDEX_NAME = 'idx_movements_created_by'
@@ -334,6 +338,13 @@ function normalizeMovementInput(item) {
       : Number(rawPrecio)
   if (precioClp !== null && (!Number.isFinite(precioClp) || precioClp < 0)) return null
 
+  const rawJh = item?.jh
+  const jh =
+    rawJh === null || rawJh === undefined || rawJh === ''
+      ? null
+      : Number(rawJh)
+  if (jh !== null && (!Number.isFinite(jh) || jh < 0)) return null
+
   return {
     labelId,
     type,
@@ -341,6 +352,7 @@ function normalizeMovementInput(item) {
     at,
     registeredBy,
     precioClp: precioClp === null ? null : Math.floor(precioClp),
+    jh: jh === null ? null : Math.floor(jh),
   }
 }
 
@@ -1200,7 +1212,7 @@ async function main() {
       let movementRows = []
       try {
         const [mRows] = await pool.execute(
-          `SELECT label_id, type, cantidad, at, registered_by, precio_clp
+          `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
            FROM movements WHERE label_id = ? ORDER BY at ASC`,
           [id],
         )
@@ -1293,8 +1305,8 @@ async function main() {
         )
       }
       await conn.execute(
-        `INSERT INTO movements (label_id, type, cantidad, at, registered_by, precio_clp, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO movements (label_id, type, cantidad, at, registered_by, precio_clp, jh, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           payload.labelId,
           payload.type,
@@ -1302,6 +1314,7 @@ async function main() {
           payload.at,
           payload.registeredBy,
           payload.precioClp,
+          payload.jh,
           req.auth?.userId ?? null,
         ],
       )
@@ -1339,7 +1352,7 @@ async function main() {
         let movementRows = []
         try {
           const [rows] = await pool.execute(
-            `SELECT label_id, type, cantidad, at, registered_by, precio_clp
+            `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
              FROM movements
              ORDER BY at ASC`,
           )
@@ -1374,6 +1387,7 @@ async function main() {
           at: row.at,
           registeredBy: row.registered_by || '',
           precioClp: row.precio_clp === null ? undefined : Number(row.precio_clp),
+          jh: row.jh === null || row.jh === undefined ? undefined : Number(row.jh),
         }))
         return res.json({ ok: true, labels, movements })
       } catch (error) {

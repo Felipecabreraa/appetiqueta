@@ -56,6 +56,11 @@ export function normalizeMovementRow(raw: unknown): Movement | null {
     rawPrecio === null || rawPrecio === undefined || rawPrecio === ''
       ? undefined
       : Number(rawPrecio)
+  const rawJh = o.jh
+  const jhVal =
+    rawJh === null || rawJh === undefined || rawJh === ''
+      ? undefined
+      : Number(rawJh)
   return {
     labelId,
     type,
@@ -63,6 +68,7 @@ export function normalizeMovementRow(raw: unknown): Movement | null {
     at,
     registeredBy: String(o.registeredBy || o.registered_by || ''),
     precioClp: typeof precio === 'number' && Number.isFinite(precio) ? Math.floor(precio) : undefined,
+    jh: typeof jhVal === 'number' && Number.isFinite(jhVal) ? Math.floor(jhVal) : undefined,
   }
 }
 

@@ -125,6 +125,8 @@ export interface Movement {
   registeredBy?: string
   /** Precio de respaldo en pesos CLP (solo se usa en primer trackeo JC). */
   precioClp?: number
+  /** Personas en la cuadrilla (JH), entero no negativo; solo primer trackeo JC. */
+  jh?: number
 }
 
 export interface JcForemanOption {

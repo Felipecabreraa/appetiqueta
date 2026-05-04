@@ -17,6 +17,7 @@ export function OperationalJcForm({
   const [totes, setTotes] = useState<number>(0)
   const [jefe, setJefe] = useState('')
   const [precioClp, setPrecioClp] = useState<number | ''>('')
+  const [jh, setJh] = useState<number | ''>('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [jefesMaestro, setJefesMaestro] = useState<Array<{ id: number; name: string }>>([])
@@ -78,6 +79,10 @@ export function OperationalJcForm({
       setErr('Ingrese un precio válido en CLP.')
       return
     }
+    if (jh === '' || !Number.isFinite(jh) || jh < 0 || !Number.isInteger(jh)) {
+      setErr('Ingrese JH: número entero de personas en la cuadrilla (0 o más).')
+      return
+    }
     setBusy(true)
     try {
       const at = new Date().toISOString()
@@ -87,6 +92,7 @@ export function OperationalJcForm({
         cantidad: totes,
         at,
         precioClp: Math.floor(precioClp),
+        jh,
       }
       const jcFirstRead = label.cantidadTotes === null ? { jefeCuadrilla: j } : undefined
       const pushed = await pushMovementToServer(
@@ -211,6 +217,24 @@ export function OperationalJcForm({
                   setPrecioClp(v === '' ? '' : Number(v))
                 }}
                 placeholder="$ CLP"
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="operational-field">
+              <span className="operational-label">JH (personas en cuadrilla)</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                className="operational-input"
+                value={jh === '' ? '' : jh}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setJh(v === '' ? '' : Number(v))
+                }}
+                placeholder="Ej.: 8 (entero, sin decimales)"
                 autoComplete="off"
               />
             </label>

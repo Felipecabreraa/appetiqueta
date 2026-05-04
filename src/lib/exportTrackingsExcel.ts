@@ -63,6 +63,7 @@ function movementToJcRow(
     'Totes grabados en etiqueta': s.totesEtiqueta,
     'Jefe cuadrilla (etiqueta)': s.jefe,
     'Precio (CLP)': m.precioClp ?? '',
+    JH: m.jh ?? '',
     'Fecha ISO (evento)': m.at,
   }
 }

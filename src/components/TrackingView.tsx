@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MovementType } from '../types'
+import type { Movement, MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
 import { getStoredOperatorName } from '../lib/operatorProfile'
@@ -42,6 +42,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [tipo, setTipo] = useState<MovementType>('jc')
   const [cantidad, setCantidad] = useState<number>(0)
   const [jefeCuadrilla, setJefeCuadrilla] = useState('')
+  const [jh, setJh] = useState<number | ''>('')
   const [jefesCuadrilla, setJefesCuadrilla] = useState<Array<{ id: number; name: string }>>([])
   const [jefesCuadrillaError, setJefesCuadrillaError] = useState<string | null>(null)
   const [, setTick] = useState(0)
@@ -217,15 +218,24 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
           setMsgTone('err')
           return
         }
+        if (jh === '' || !Number.isFinite(jh) || jh < 0 || !Number.isInteger(jh)) {
+          setMsg('En el primer trackeo JC indique JH: número entero de personas en la cuadrilla (0 o más).')
+          setMsgTone('err')
+          return
+        }
       }
     }
 
-    const movement = {
+    const primeraJc = tipo === 'jc' && found.cantidadTotes === null
+    const movement: Movement = {
       labelId: found.id,
       type: tipo,
       cantidad,
       at: new Date().toISOString(),
       registeredBy: getStoredOperatorName().trim() || undefined,
+    }
+    if (primeraJc) {
+      movement.jh = jh as number
     }
     const jcFirstRead =
       tipo === 'jc' && found.cantidadTotes === null
@@ -238,7 +248,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
         movement,
         jcFirstRead ? { jcFirstRead } : undefined,
       )
-      if (!pushed.ok) {
+      if (pushed.ok === false) {
         setMsg(pushed.error)
         setMsgTone('err')
         return
@@ -289,7 +299,8 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             llegada al acopio.
           </li>
           <li>
-            <strong>Primera vez (JC):</strong> totes que salen y nombre del jefe de cuadrilla.
+            <strong>Primera vez (JC):</strong> totes que salen, jefe de cuadrilla y JH (personas en
+            cuadrilla).
           </li>
           <li>
             <strong>En acopio:</strong> totes que llegaron.
@@ -392,6 +403,25 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                   No se pudo cargar la lista de maestros; puede escribir el nombre manualmente.
                 </span>
               ) : null}
+            </label>
+          )}
+          {tipo === 'jc' && label?.cantidadTotes === null && (
+            <label className="full-width">
+              JH (personas en cuadrilla)
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={jh === '' ? '' : jh}
+                disabled={Boolean(label && flowComplete)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setJh(v === '' ? '' : Number(v))
+                }}
+                placeholder="Ej.: 8 (entero ≥ 0)"
+                autoComplete="off"
+              />
             </label>
           )}
           <button
