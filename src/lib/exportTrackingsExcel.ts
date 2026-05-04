@@ -11,6 +11,45 @@ export type TrackingsExportData = {
 const SHEET_JC = 'JC - Primera lectura QR'
 const SHEET_ACOPIO = 'Acopio - Segunda lectura QR'
 
+/** Orden fijo de columnas (evita que SheetJS omita columnas con json_to_sheet). */
+const JC_HEADERS = [
+  '#',
+  'Codigo etiqueta (QR)',
+  'Cantidad totes (salida JC)',
+  'Fecha y hora',
+  'Empresa',
+  'CSG',
+  'Especie',
+  'Variedad',
+  'Fecha cosecha',
+  'Sector',
+  'Centro costo',
+  'Totes grabados en etiqueta',
+  'Jefe cuadrilla (etiqueta)',
+  'Precio (CLP)',
+  'JH (personas en cuadrilla)',
+  'Fecha ISO (evento)',
+] as const
+
+const ACOPIO_HEADERS = [
+  '#',
+  'Codigo etiqueta (QR)',
+  'Cantidad totes (llegada al acopio)',
+  'Fecha y hora',
+  'Empresa',
+  'CSG',
+  'Especie',
+  'Variedad',
+  'Fecha cosecha',
+  'Sector',
+  'Centro costo',
+  'Totes grabados en etiqueta',
+  'Jefe cuadrilla (etiqueta)',
+  'Precio (CLP)',
+  'JH (personas en cuadrilla)',
+  'Fecha ISO (evento)',
+] as const
+
 function labelSnapshot(label: LabelRecord | undefined): {
   totesEtiqueta: string
   empresa: string
@@ -63,7 +102,7 @@ function movementToJcRow(
     'Totes grabados en etiqueta': s.totesEtiqueta,
     'Jefe cuadrilla (etiqueta)': s.jefe,
     'Precio (CLP)': m.precioClp ?? '',
-    JH: m.jh ?? '',
+    'JH (personas en cuadrilla)': m.jh ?? '',
     'Fecha ISO (evento)': m.at,
   }
 }
@@ -92,18 +131,22 @@ function movementToAcopioRow(
     'Totes grabados en etiqueta': s.totesEtiqueta,
     'Jefe cuadrilla (etiqueta)': s.jefe,
     'Precio (CLP)': m.precioClp ?? '',
+    'JH (personas en cuadrilla)': '',
     'Fecha ISO (evento)': m.at,
   }
 }
 
-function sheetFromRows(
+function sheetFromKeyedRows(
   rows: Record<string, string | number>[],
+  headers: readonly string[],
   emptyHint: string,
 ): XLSX.WorkSheet {
   if (rows.length === 0) {
     return XLSX.utils.json_to_sheet([{ Mensaje: emptyHint }])
   }
-  return XLSX.utils.json_to_sheet(rows)
+  const head = [...headers]
+  const aoa = [head, ...rows.map((row) => head.map((h) => row[h] ?? ''))]
+  return XLSX.utils.aoa_to_sheet(aoa)
 }
 
 /**
@@ -143,8 +186,9 @@ export function exportTrackingsExcel(fileName?: string, source?: TrackingsExport
 
   XLSX.utils.book_append_sheet(
     wb,
-    sheetFromRows(
+    sheetFromKeyedRows(
       rowsJc,
+      JC_HEADERS,
       'No hay registros de trackeo JC en la base de datos (ningún escaneo sincronizado aún).',
     ),
     SHEET_JC,
@@ -152,8 +196,9 @@ export function exportTrackingsExcel(fileName?: string, source?: TrackingsExport
 
   XLSX.utils.book_append_sheet(
     wb,
-    sheetFromRows(
+    sheetFromKeyedRows(
       rowsAcopio,
+      ACOPIO_HEADERS,
       'No hay registros de trackeo Acopio en la base de datos (ningún escaneo sincronizado aún).',
     ),
     SHEET_ACOPIO,
