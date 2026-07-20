@@ -86,7 +86,7 @@ export function GenerarView({
               </span>
               <span className="flow-stepper-body">
                 <strong>Datos del lote</strong>
-                <span className="flow-stepper-desc">Cantidad de etiquetas y formulario en ventana.</span>
+                <span className="flow-stepper-desc">Cantidad y formulario; luego generar en la tarjeta.</span>
               </span>
             </li>
             <li>
@@ -141,19 +141,27 @@ export function GenerarView({
           <div className="lote-cta-banner">
             <button
               type="button"
-              className="btn primary btn-block btn-pad-lg"
+              className={`btn btn-block btn-pad-lg${formComplete ? ' secondary' : ' primary'}`}
               onClick={() => onLoteModalOpenChange(true)}
             >
-              {formComplete ? 'Editar datos del lote' : 'Abrir formulario de datos del lote'}
+              {formComplete ? 'Editar datos del lote' : 'Completar datos del lote'}
             </button>
             <p className="lote-cta-hint muted">
               {formComplete
-                ? 'Puede ajustar los campos del lote antes de generar.'
-                : 'Complete empresa, especie, fechas y el resto de campos obligatorios en el formulario.'}
+                ? 'Los datos ya están listos. Puede editarlos o generar las etiquetas abajo.'
+                : 'Empresa, especie, fechas y campos obligatorios se completan en una ventana, sin salir de esta pantalla.'}
             </p>
           </div>
-          <div className="lote-summary">
-            <h3 className="lote-summary-title">Resumen del lote</h3>
+          <div className={`lote-summary${formComplete ? ' lote-summary--ready' : ' lote-summary--pending'}`}>
+            <div className="lote-summary-head">
+              <h3 className="lote-summary-title">Resumen del lote</h3>
+              <span
+                className={`lote-summary-status${formComplete ? ' lote-summary-status--ok' : ' lote-summary-status--pending'}`}
+                role="status"
+              >
+                {formComplete ? 'Completo' : 'Pendiente'}
+              </span>
+            </div>
             {formComplete ? (
               <dl className="lote-summary-dl">
                 <div className="lote-summary-row">
@@ -194,9 +202,20 @@ export function GenerarView({
             )}
           </div>
           <div className="lote-setup-actions lote-setup-actions--tail">
-            <button type="button" className="btn primary btn-generate-solo" onClick={onGenerate}>
+            <button
+              type="button"
+              className="btn primary btn-generate-solo"
+              onClick={onGenerate}
+              disabled={!formComplete}
+              title={formComplete ? undefined : 'Complete los datos del lote antes de generar'}
+            >
               {submitLabel}
             </button>
+            {!formComplete ? (
+              <p className="lote-generate-hint muted">
+                El botón se habilita cuando el formulario del lote esté completo.
+              </p>
+            ) : null}
           </div>
           {genError && (
             <p className="alert error" role="alert">
@@ -328,6 +347,11 @@ export function GenerarView({
         onClose={() => onLoteModalOpenChange(false)}
         title="Datos del lote"
         size="lg"
+        closeLabel="Cerrar"
+        primaryAction={{
+          label: formComplete ? 'Guardar y continuar' : 'Seguir más tarde',
+          onClick: () => onLoteModalOpenChange(false),
+        }}
       >
         <p className="sub bulk-intro modal-form-intro">
           Mismos datos para todas las etiquetas de esta generación. Cada etiqueta tendrá un código QR
@@ -344,8 +368,8 @@ export function GenerarView({
           costCenters={costCenters}
           mastersLoading={mastersLoading}
           mastersError={mastersError}
-          onSubmit={onGenerate}
-          submitLabel={submitLabel}
+          onSubmit={() => onLoteModalOpenChange(false)}
+          showSubmit={false}
         />
       </Modal>
     </>

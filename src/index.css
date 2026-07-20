@@ -68,6 +68,8 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: clip;
+  /* Evita que al mostrar/ocultar el scrollbar (p. ej. modal) salte el layout/nav */
+  scrollbar-gutter: stable;
 }
 
 @media (prefers-reduced-motion: reduce) {

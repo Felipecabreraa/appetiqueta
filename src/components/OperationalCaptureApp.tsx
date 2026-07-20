@@ -47,7 +47,6 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   useEffect(() => {
     if (!lookupTpl) return
     let cancelled = false
-    setRemoteState({ labelId: id, status: 'idle' })
     void syncLabelOperationalFromServer(id).then((r) => {
       if (cancelled) return
       const after = getLabelById(id)

@@ -15,6 +15,8 @@ interface Props {
   onSubmit: () => void
   disabled?: boolean
   submitLabel?: string
+  /** Si false, oculta el botón de envío (p. ej. cuando el pie del modal concentra las acciones). */
+  showSubmit?: boolean
 }
 
 export function LabelForm({
@@ -31,6 +33,7 @@ export function LabelForm({
   onSubmit,
   disabled,
   submitLabel = 'Generar etiqueta y código QR',
+  showSubmit = true,
 }: Props) {
   const set = <K extends keyof LabelFormValues>(key: K, val: LabelFormValues[K]) => {
     onChange({ ...values, [key]: val })
@@ -169,11 +172,13 @@ export function LabelForm({
           {mastersError}
         </p>
       )}
-      <div className="form-actions">
-        <button type="submit" className="btn primary" disabled={disabled}>
-          {submitLabel}
-        </button>
-      </div>
+      {showSubmit ? (
+        <div className="form-actions">
+          <button type="submit" className="btn primary" disabled={disabled}>
+            {submitLabel}
+          </button>
+        </div>
+      ) : null}
     </form>
   )
 }

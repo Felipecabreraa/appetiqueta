@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { lockBodyScroll } from '../lib/scrollLock'
 
 export type ModalSize = 'md' | 'lg'
 
@@ -8,9 +9,15 @@ type Props = {
   onClose: () => void
   title: string
   children: ReactNode
-  /** Texto del botón que cierra (además de la X y Escape). */
+  /** Texto del botón secundario que cierra. */
   closeLabel?: string
   size?: ModalSize
+  /** Acción primaria en el pie (p. ej. Guardar). */
+  primaryAction?: {
+    label: string
+    onClick: () => void
+    disabled?: boolean
+  }
 }
 
 export function Modal({
@@ -20,23 +27,24 @@ export function Modal({
   children,
   closeLabel = 'Cerrar',
   size = 'md',
+  primaryAction,
 }: Props) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
+    return lockBodyScroll()
   }, [open])
 
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -44,10 +52,52 @@ export function Modal({
 
   useEffect(() => {
     if (!open) return
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     const id = window.requestAnimationFrame(() => {
-      panelRef.current?.focus()
+      const panel = panelRef.current
+      if (!panel) return
+      const focusable = panel.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      ;(focusable ?? panel).focus()
     })
-    return () => window.cancelAnimationFrame(id)
+    return () => {
+      window.cancelAnimationFrame(id)
+      previouslyFocused.current?.focus?.()
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const panel = panelRef.current
+    if (!panel) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const focusables = [
+        ...panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter((el) => el.offsetParent !== null || el === document.activeElement)
+      if (focusables.length === 0) {
+        e.preventDefault()
+        panel.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    panel.addEventListener('keydown', onKeyDown)
+    return () => panel.removeEventListener('keydown', onKeyDown)
   }, [open])
 
   if (!open) return null
@@ -78,9 +128,19 @@ export function Modal({
         </header>
         <div className="modal-body">{children}</div>
         <footer className="modal-footer">
-          <button type="button" className="btn secondary modal-footer-close" onClick={onClose}>
+          <button type="button" className="btn secondary modal-footer-btn" onClick={onClose}>
             {closeLabel}
           </button>
+          {primaryAction ? (
+            <button
+              type="button"
+              className="btn primary modal-footer-btn modal-footer-btn--primary"
+              onClick={primaryAction.onClick}
+              disabled={primaryAction.disabled}
+            >
+              {primaryAction.label}
+            </button>
+          ) : null}
         </footer>
       </div>
     </div>
