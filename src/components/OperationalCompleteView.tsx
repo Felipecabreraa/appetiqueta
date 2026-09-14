@@ -27,7 +27,7 @@ export function OperationalCompleteView({ labelId }: { labelId: string }) {
           <div className="operational-code-pill">{id}</div>
           {label && (
             <p className="operational-meta">
-              {label.especie} · {label.variedad}
+              {label.especie} / {label.variedad}
             </p>
           )}
           {summary && (

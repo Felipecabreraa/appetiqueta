@@ -1,61 +1,54 @@
 :root {
-  --text: #3a3644;
-  --text-h: #0f0d14;
-  --muted: #5c5668;
-  --muted-strong: #45405a;
-  --bg: #eceaf3;
-  --bg-subtle: #e6e3ef;
-  --canvas: #f5f4fa;
+  --ink: #161916;
+  --text: #3a3f3c;
+  --text-h: #161916;
+  --muted: #66706b;
+  --muted-strong: #4a524e;
+  --bg: #f2f3f1;
+  --bg-subtle: #eaeeeb;
+  --canvas: #f2f3f1;
   --surface: #ffffff;
-  --surface-elevated: #fdfcfe;
-  --surface-hover: #f9f8fc;
-  /* Bordes más suaves: menos protagonismo */
-  --border: #e4e0ed;
-  --border-strong: #d4cfe0;
-  --line-faint: rgba(56, 48, 82, 0.07);
-  --line-muted: rgba(56, 48, 82, 0.1);
-  --accent: #4d3eb0;
-  --accent-hover: #3d328f;
-  --accent-muted: #6b5fc9;
-  --accent-soft: rgba(77, 62, 176, 0.12);
-  --accent-ring: rgba(77, 62, 176, 0.38);
-  --ok: #0d6b63;
-  --ok-soft: rgba(13, 107, 99, 0.12);
-  --warn: #b45309;
-  --warn-text: #92400e;
-  --danger: #b91c1c;
-  --danger-soft: rgba(185, 28, 28, 0.08);
-  /* Navegación lateral (panel oscuro) */
-  --sidebar-bg: linear-gradient(165deg, #242030 0%, #1a1724 52%, #16141e 100%);
-  --sidebar-border: rgba(255, 255, 255, 0.055);
-  --sidebar-text: rgba(255, 255, 255, 0.88);
-  --sidebar-muted: rgba(200, 194, 230, 0.52);
-  --sidebar-item-hover: rgba(255, 255, 255, 0.065);
-  --sidebar-item-active-bg: rgba(255, 255, 255, 0.09);
-  --sidebar-item-active-glow: rgba(124, 110, 220, 0.35);
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
-  --shadow-sm: 0 1px 3px rgba(22, 18, 36, 0.045);
-  --shadow-md: 0 12px 36px rgba(22, 18, 36, 0.08);
-  --shadow-card: 0 1px 2px rgba(22, 18, 36, 0.035), 0 10px 40px rgba(58, 48, 96, 0.055);
-  --shadow-sidebar: 1px 0 0 rgba(255, 255, 255, 0.05), 8px 0 32px rgba(8, 6, 18, 0.1);
+  --surface-elevated: #ffffff;
+  --surface-hover: #f6f7f5;
+  --border: #e2e5e1;
+  --border-strong: #c9cec9;
+  --line-faint: rgba(22, 25, 22, 0.07);
+  --line-muted: rgba(22, 25, 22, 0.12);
+  --accent: #1b4a42;
+  --accent-hover: #143832;
+  --accent-muted: #2d6a5f;
+  --accent-soft: rgba(27, 74, 66, 0.08);
+  --accent-ring: rgba(27, 74, 66, 0.32);
+  --ok: #1f6b4a;
+  --ok-soft: rgba(31, 107, 74, 0.1);
+  --warn: #8a5a16;
+  --warn-text: #6e4710;
+  --danger: #9b2c2c;
+  --danger-soft: rgba(155, 44, 44, 0.08);
+  --sidebar-bg: #ffffff;
+  --sidebar-border: var(--border);
+  --sidebar-text: #2c322f;
+  --sidebar-muted: #6b746f;
+  --sidebar-item-hover: #f4f6f4;
+  --sidebar-item-active-bg: #eef3f1;
+  --sidebar-item-active-glow: transparent;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --shadow-sm: none;
+  --shadow-md: 0 12px 32px rgba(22, 25, 22, 0.08);
+  --shadow-card: none;
+  --shadow-sidebar: none;
   --shadow-topbar: 0 1px 0 var(--line-faint);
-  --header-bg: color-mix(in srgb, var(--surface) 94%, transparent);
-  --transition-fast: 0.16s ease;
-  /* Objetivo táctil mínimo recomendado (WCAG / HIG) */
+  --header-bg: color-mix(in srgb, var(--surface) 92%, transparent);
+  --transition-fast: 0.14s ease;
   --touch-target: 2.75rem;
-  /* Gutter horizontal del área de trabajo (topbar + main + footer alineados) */
   --shell-pad-x: clamp(1.15rem, 2.4vw + 0.4rem, 2.65rem);
+  --font-ui: 'Schibsted Grotesk', 'Segoe UI', sans-serif;
+  --font-display: 'Schibsted Grotesk', 'Segoe UI', sans-serif;
 
-  font-family:
-    'Plus Jakarta Sans',
-    system-ui,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-ui);
   line-height: 1.5;
   font-size: 16px;
   color: var(--text);
@@ -68,7 +61,6 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: clip;
-  /* Evita que al mostrar/ocultar el scrollbar (p. ej. modal) salte el layout/nav */
   scrollbar-gutter: stable;
 }
 
@@ -86,25 +78,22 @@ body {
   margin: 0;
   min-width: 0;
   overflow-x: clip;
-  background:
-    radial-gradient(1000px 420px at 12% -80px, color-mix(in srgb, var(--accent) 12%, transparent), transparent),
-    radial-gradient(800px 360px at 100% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent),
-    var(--bg);
+  background: var(--bg);
 }
 
 #root {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: none;
   margin: 0;
   min-width: 0;
   min-height: 100svh;
   min-height: 100dvh;
-  /* Full-bleed: el shell ocupa todo el ancho; gutters viven dentro del layout */
   padding-inline: 0;
   padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
 }
 
-/* Vistas sin AppShell (login, carga): respiro lateral y safe area */
 #root > main.app-main {
   padding-left: max(var(--shell-pad-x), env(safe-area-inset-left, 0px));
   padding-right: max(var(--shell-pad-x), env(safe-area-inset-right, 0px));
@@ -115,4 +104,16 @@ h2,
 h3 {
   font-weight: 600;
   color: var(--text-h);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

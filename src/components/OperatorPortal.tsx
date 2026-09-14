@@ -12,9 +12,8 @@ export function OperatorPortal() {
   return (
     <main className="app-main">
       <section className="card" style={{ maxWidth: 520, margin: '1rem auto' }}>
-        <p className="page-eyebrow">Modo operador</p>
-        <h2 className="page-heading">Captura operativa por QR</h2>
-        <p className="sub">Ingrese o pegue el código de etiqueta para abrir el formulario operativo.</p>
+        <h2 className="page-heading">Captura por QR</h2>
+        <p className="sub">Escriba o pegue el código de la etiqueta para abrir el formulario.</p>
         <form
           className="label-form"
           onSubmit={(e) => {

@@ -49,13 +49,15 @@ export function AdminTopBar({
             {loteComplete ? 'Lote listo' : 'Faltan datos del lote'}
           </p>
         ) : null}
-        <p className="app-topbar-user">
-          <span className="app-topbar-user-name">{userName}</span>
-          <span className="app-topbar-user-role">{roleLabel}</span>
-        </p>
-        <button type="button" className="btn secondary app-topbar-logout" onClick={onLogout}>
-          Salir
-        </button>
+        <div className="app-topbar-session">
+          <p className="app-topbar-user">
+            <span className="app-topbar-user-name">{userName}</span>
+            <span className="app-topbar-user-role">{roleLabel}</span>
+          </p>
+          <button type="button" className="btn secondary app-topbar-logout" onClick={onLogout}>
+            Salir
+          </button>
+        </div>
       </div>
     </header>
   )

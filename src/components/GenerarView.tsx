@@ -71,13 +71,11 @@ export function GenerarView({
     <>
       <div className="generar-stack generar-page no-print">
         <section className="card workflow-card" aria-labelledby="workflow-heading">
-          <p className="page-eyebrow">Flujo de trabajo</p>
           <h2 id="workflow-heading" className="page-heading">
             Crear e imprimir etiquetas
           </h2>
           <p className="page-lead">
-            Complete el lote en el formulario modal, confirme la cantidad, genere e imprima o exporte
-            a PDF. En campo use el módulo <strong>Registrar lecturas</strong>.
+            Complete el lote, genere los QR e imprima o exporte a PDF. En campo use Registrar lecturas.
           </p>
           <ol className="flow-stepper" aria-label="Pasos del proceso">
             <li>
@@ -175,13 +173,13 @@ export function GenerarView({
                 <div className="lote-summary-row">
                   <dt>Especie / variedad</dt>
                   <dd>
-                    {form.especie} — {form.variedad}
+                    {form.especie} / {form.variedad}
                   </dd>
                 </div>
                 <div className="lote-summary-row">
                   <dt>CSG / sector</dt>
                   <dd>
-                    {form.csg} · {form.sector}
+                    {form.csg} / {form.sector}
                   </dd>
                 </div>
                 <div className="lote-summary-row">

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BrandLogo } from './BrandLogo'
 
 export function LoginView({
   onLogin,
@@ -15,17 +16,13 @@ export function LoginView({
 
   return (
     <main className="app-main login-main">
-      <section className="card login-card">
+      <section className="login-card">
         <div className="login-brand">
-          <div className="brand-mark" aria-hidden>
-            <span className="brand-mark-inner">A</span>
-          </div>
-          <div>
-            <p className="page-eyebrow">Acceso seguro</p>
-            <h2>Ingreso al sistema</h2>
-          </div>
+          <BrandLogo size="lg" />
+          <p className="login-product">Etiquetado</p>
         </div>
-        <p className="sub login-sub">Use su cuenta según rol para entrar a módulos administrativos u operativos.</p>
+        <h2>Entrar</h2>
+        <p className="sub login-sub">Usuario y contraseña de su cuenta.</p>
         <form
           className="label-form login-form"
           onSubmit={(e) => {
@@ -55,12 +52,11 @@ export function LoginView({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                placeholder="••••••••"
                 disabled={busy}
               />
             </label>
           </div>
-          <p className="muted login-help">Si no recuerda su acceso, solicite restablecimiento al SuperAdmin.</p>
+          <p className="muted login-help">Si no recuerda el acceso, pídalo al SuperAdmin.</p>
           {error && (
             <p className="alert error" role="alert" aria-live="assertive">
               {error}
@@ -68,7 +64,7 @@ export function LoginView({
           )}
           <div className="form-actions">
             <button type="submit" className="btn primary btn-block" disabled={!canSubmit}>
-              {busy ? 'Ingresando...' : 'Ingresar'}
+              {busy ? 'Entrando…' : 'Entrar'}
             </button>
           </div>
         </form>

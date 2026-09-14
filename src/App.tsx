@@ -38,11 +38,31 @@ export type Tab = AppTab
 const urlBoot = readTrackingFromUrl()
 const TAB_SET: Set<AppTab> = new Set(['dashboard', 'generar', 'trazabilidad', 'maestros', 'usuarios'])
 
+function hashParts(): { tab: string; rest: string } {
+  const raw = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase()
+  const [tab = '', rest = ''] = raw.split('/')
+  return { tab, rest }
+}
+
 function readTabFromHash(): AppTab | null {
   if (typeof window === 'undefined') return null
-  const raw = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase()
-  if (!raw) return null
-  return TAB_SET.has(raw as AppTab) ? (raw as AppTab) : null
+  const { tab } = hashParts()
+  if (!tab) return null
+  return TAB_SET.has(tab as AppTab) ? (tab as AppTab) : null
+}
+
+function readMaestrosSubFromHash(): MaestrosSubTab | null {
+  if (typeof window === 'undefined') return null
+  const { tab, rest } = hashParts()
+  if (tab !== 'maestros') return null
+  if (rest === 'admin') return 'admin'
+  if (rest === 'excel') return 'excel'
+  return null
+}
+
+function hashFor(tab: AppTab, maestrosSubTab: MaestrosSubTab): string {
+  if (tab === 'maestros') return `#maestros/${maestrosSubTab}`
+  return `#${tab}`
 }
 
 function App() {
@@ -50,7 +70,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true)
   const [loginBusy, setLoginBusy] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
-  const [tab, setTab] = useState<AppTab>(urlBoot.tab)
+  const [tab, setTab] = useState<AppTab>(() => readTabFromHash() ?? urlBoot.tab)
   const [form, setForm] = useState<LabelFormValues>(() => defaultFormValues())
   const [seasons, setSeasons] = useState<SeasonOption[]>([])
   const [companies, setCompanies] = useState<CompanyOption[]>([])
@@ -71,7 +91,9 @@ function App() {
   const [loteModalOpen, setLoteModalOpen] = useState(false)
   const [syncWarning, setSyncWarning] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
-  const [maestrosSubTab, setMaestrosSubTab] = useState<MaestrosSubTab>('excel')
+  const [maestrosSubTab, setMaestrosSubTab] = useState<MaestrosSubTab>(
+    () => readMaestrosSubFromHash() ?? 'excel',
+  )
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null)
 
   const role = user?.role ?? null
@@ -168,6 +190,8 @@ function App() {
       const hashTab = readTabFromHash()
       if (!hashTab) return
       navigateToTab(hashTab)
+      const sub = readMaestrosSubFromHash()
+      if (sub) setMaestrosSubTab(sub)
     }
     applyHashTab()
     window.addEventListener('hashchange', applyHashTab)
@@ -176,11 +200,11 @@ function App() {
 
   useEffect(() => {
     if (!role || urlBoot.operational) return
-    const expected = `#${tab}`
+    const expected = hashFor(tab, maestrosSubTab)
     if (window.location.hash !== expected) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${expected}`)
     }
-  }, [role, tab])
+  }, [role, tab, maestrosSubTab])
 
   const goToTrackingWith = useCallback((labelId: string) => {
     setTrackingSeed({ code: labelId.toUpperCase(), nonce: Date.now() })
@@ -364,7 +388,7 @@ function App() {
             </p>
           ) : null}
 
-          {tab !== 'generar' && canAccessTab(user.role, tab) ? (
+          {tab !== 'generar' && tab !== 'dashboard' && canAccessTab(user.role, tab) ? (
             <PageHeader title={PAGE_META[tab].title} subtitle={PAGE_META[tab].subtitle} />
           ) : null}
 

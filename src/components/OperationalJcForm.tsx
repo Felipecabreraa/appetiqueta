@@ -134,7 +134,7 @@ export function OperationalJcForm({
         <div className="operational-card">
           <div className="operational-code-pill">{label.id}</div>
           <p className="operational-meta">
-            {label.empresa} · {label.especie} — {label.variedad}
+            {label.empresa}. {label.especie}, {label.variedad}
           </p>
 
           <div className="operational-fields">

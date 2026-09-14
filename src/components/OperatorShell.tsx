@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { BrandLogo } from './BrandLogo'
 
 type Props = {
   userName: string
@@ -11,12 +12,10 @@ export function OperatorShell({ userName, onLogout, children }: Props) {
     <div className="app app--operator">
       <header className="operator-topbar no-print">
         <div className="operator-topbar-brand">
-          <div className="operator-topbar-mark" aria-hidden>
-            <span>A</span>
-          </div>
+          <BrandLogo size="sm" />
           <div>
-            <span className="operator-topbar-title">App etiquetado</span>
-            <span className="operator-topbar-sub">Captura en campo</span>
+            <span className="operator-topbar-title">Etiquetado</span>
+            <span className="operator-topbar-sub">Agrícola Esmeralda</span>
           </div>
         </div>
         <div className="operator-topbar-end">

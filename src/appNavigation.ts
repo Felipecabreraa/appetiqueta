@@ -7,11 +7,11 @@ export type PageMeta = {
 
 /** Línea breve bajo el título en la barra superior (contexto ejecutivo) */
 export const TOPBAR_HINT: Record<AppTab, string> = {
-  dashboard: 'Vista general y accesos rápidos',
-  generar: 'Lotes, códigos QR e impresión',
-  trazabilidad: 'Consulta y registro de movimientos',
-  maestros: 'Importación Excel y catálogos',
-  usuarios: 'Cuentas, roles y permisos',
+  dashboard: 'Tareas de hoy',
+  generar: 'Lote, QR e impresión',
+  trazabilidad: 'Consulta y movimientos',
+  maestros: 'Excel y catálogos',
+  usuarios: 'Cuentas y permisos',
 }
 
 export const PAGE_META: Record<AppTab, PageMeta> = {

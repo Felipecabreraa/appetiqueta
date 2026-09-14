@@ -1,4 +1,5 @@
 import type { AppTab } from '../appTabs'
+import { BrandLogo } from './BrandLogo'
 import { ModuleIcon } from './NavIcons'
 
 type NavItem = { tab: AppTab; label: string }
@@ -31,12 +32,10 @@ export function AppSidebar({ activeTab, onNavigate, allowedTabs, onItemActivate 
   return (
     <aside className="app-sidebar no-print" aria-label="Navegación principal">
       <div className="app-sidebar-brand">
-        <div className="app-sidebar-mark" aria-hidden>
-          <span className="app-sidebar-mark-inner">A</span>
-        </div>
+        <BrandLogo size="md" />
         <div className="app-sidebar-brand-text">
-          <span className="app-sidebar-product">App etiquetado</span>
-          <span className="app-sidebar-tagline">QR y trazabilidad</span>
+          <span className="app-sidebar-product">Etiquetado</span>
+          <span className="app-sidebar-tagline">Agrícola Esmeralda</span>
         </div>
       </div>
 

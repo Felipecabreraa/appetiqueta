@@ -28,8 +28,8 @@ const TIPO_LABEL: Record<MovementType, string> = {
 }
 
 const PILL_SHORT: Record<MovementType, string> = {
-  jc: 'JC · salida',
-  acopio: 'Acopio · llegada',
+  jc: 'JC',
+  acopio: 'Acopio',
 }
 
 interface Props {
@@ -463,11 +463,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             const rowPhase = getOperationalPhase(l.id)
             const phaseHint =
               rowPhase === 'complete'
-                ? ' · circuito cerrado'
+                ? ' Circuito cerrado'
                 : rowPhase === 'acopio'
-                  ? ' · pendiente: acopio'
+                  ? ' Pendiente: acopio'
                   : rowPhase === 'jc'
-                    ? ' · falta salida JC'
+                    ? ' Falta salida JC'
                     : ''
             return (
             <li
@@ -480,8 +480,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                 {l.id}
               </button>
               <span className="muted">
-                {l.especie} ·{' '}
-                {l.cantidadTotes === null ? 'JC pendiente' : `${l.cantidadTotes} totes`}
+                {l.especie}, {l.cantidadTotes === null ? 'JC pendiente' : `${l.cantidadTotes} totes`}
                 {phaseHint}
               </span>
             </li>
@@ -511,7 +510,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             <dd>{label.empresa}</dd>
             <dt>Especie / variedad</dt>
             <dd>
-              {label.especie} — {label.variedad}
+              {label.especie} / {label.variedad}
             </dd>
             <dt>Totes / jefe (primer JC)</dt>
             <dd>
@@ -519,7 +518,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                 <em>Pendiente — complete en primer JC</em>
               ) : (
                 <>
-                  {label.cantidadTotes} totes · Jefe:{' '}
+                  {label.cantidadTotes} totes. Jefe:{' '}
                   {label.jefeCuadrilla.trim() || '—'}
                 </>
               )}

@@ -78,7 +78,7 @@ export function BatchHistoryPanel() {
                   <strong>{b.count}</strong> etiqueta{b.count !== 1 ? 's' : ''}
                 </td>
                 <td>
-                  {b.empresa} · {b.especie}
+                  {b.empresa}, {b.especie}
                 </td>
                 <td className="actions">
                   <button
