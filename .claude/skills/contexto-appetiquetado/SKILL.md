@@ -61,4 +61,5 @@ Los roles se validan **en ambos lados**: `src/lib/roleAccess.ts` (UI) y `ACCESS`
 - `GET /api/labels/:id`, `GET /api/master-data/jc-foremen` y `POST /api/movements` no exigen sesión (flujo de terreno).
 - CORS abierto y una contraseña por defecto del superadmin si falta `SUPERADMIN_PASSWORD`.
 - **Bug conocido (detectado por el E2E de API):** `POST /api/movements` lanza `ER_LOCK_DEADLOCK` → 500 cuando llegan varios JC simultáneos sobre etiquetas distintas (alrededor de 3/120 con concurrencia 4). Causa probable: `SELECT … FROM movements … FOR UPDATE` toma gap locks sobre rangos vacíos. Mientras no se corrija, el CI queda en rojo.
+- Guardián de ambiente (`server/envGuard.cjs`): con `APP_ENV=staging` exige `MYSQL_DATABASE=trn_etiquetatest`, y con `APP_ENV=production` rechaza las BD `*test*`. Staging y producción comparten el usuario MySQL `trn_felipe`, así que **no debilites este guardián**.
 - Cuando el servidor arranca, ejecuta DDL/DML sobre la BD a la que apunta (`ensureMovementsSchema`, `ensureBaseData`).

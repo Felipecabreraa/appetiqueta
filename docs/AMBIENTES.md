@@ -44,9 +44,9 @@ El servicio de producción `appetiqueta` se creó a mano, no desde un Blueprint.
 | Health Check Path | `/api/health` |
 | Auto-Deploy | On Commit (pasar a *After CI Checks Pass* cuando el CI esté en verde) |
 
-Variables de entorno: `NODE_VERSION=22.12.0`, `APP_ENV=staging`, `MYSQL_HOST=trn.cl`, `MYSQL_USER` y `MYSQL_PASSWORD` (de staging), `MYSQL_DATABASE=trn_etiquetatest`, `SUPERADMIN_PASSWORD` (propio). Si producción usa `SYNC_API_KEY`, agregue también `SYNC_API_KEY` y `VITE_SYNC_API_KEY` con un valor distinto al de producción.
+Variables de entorno: `NODE_VERSION=22.12.0`, `APP_ENV=staging` (**obligatoria**: activa el guardián), `MYSQL_HOST=trn.cl`, `MYSQL_USER` y `MYSQL_PASSWORD` (de staging), `MYSQL_DATABASE=trn_etiquetatest`, `SUPERADMIN_PASSWORD` (propio). Si producción usa `SYNC_API_KEY`, agregue también `SYNC_API_KEY` y `VITE_SYNC_API_KEY` con un valor distinto al de producción.
 
-**Revisar `appetiqueta` (producción):** Branch = `main`, Health Check Path = `/api/health` y `MYSQL_DATABASE` = la BD de producción. Pase Auto-Deploy a *After CI Checks Pass* cuando el CI esté en verde en `main`.
+**Revisar `appetiqueta` (producción):** agregue `APP_ENV=production` (activa el guardián). Branch = `main`, Health Check Path = `/api/health` y `MYSQL_DATABASE` = la BD de producción. Pase Auto-Deploy a *After CI Checks Pass* cuando el CI esté en verde en `main`.
 
 ### 4. Pruebas locales
 Ya está configurado en este equipo: `.env.test` apunta a la BD local `appetiquetado_test`. Para otro equipo, vea `.env.test.example`.
@@ -56,6 +56,7 @@ Ya está configurado en este equipo: `.env.test` apunta a la BD local `appetique
 |---|---|
 | Pruebas con escritura solo contra una BD local `*_test` | `scripts/test-env.mjs` (guardián) |
 | Init de staging solo contra la BD `trn_etiquetatest` | `scripts/db-staging-init.mjs` |
+| El servidor no arranca si `APP_ENV` y `MYSQL_DATABASE` no coinciden (staging ⇒ `trn_etiquetatest`; production ⇒ nunca una BD `*test*`) | `server/envGuard.cjs` |
 | Push forzado prohibido; `main` ⊆ `origin/developer`; `verify` verde antes de push | `.claude/hooks/git-push-gate.mjs` |
 | Todo push y merge pide confirmación humana | `.claude/settings.json` (`ask`) |
 | Deploy solo con el CI en verde | `render.yaml` + `.github/workflows/ci.yml` |

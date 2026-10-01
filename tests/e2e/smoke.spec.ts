@@ -4,6 +4,10 @@ import { expect, test } from '@playwright/test'
 test('API responde health @smoke', async ({ request }) => {
   const res = await request.get(`${process.env.E2E_API_BASE}/api/health`)
   expect(res.ok()).toBeTruthy()
+  const body = await res.json()
+  expect(body).toHaveProperty('env')
+  // CA-06 guardián: al publicar, E2E_EXPECTED_ENV=staging|production confirma que el servicio corre en su ambiente.
+  if (process.env.E2E_EXPECTED_ENV) expect(body.env).toBe(process.env.E2E_EXPECTED_ENV)
 })
 
 test('sin sesión se muestra el login @smoke', async ({ page }) => {

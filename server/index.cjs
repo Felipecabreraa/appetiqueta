@@ -7,6 +7,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const express = require('express')
 const cors = require('cors')
 const mysql = require('mysql2/promise')
+const { checkEnvironment } = require('./envGuard.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
 const distPath = path.join(__dirname, '..', 'dist')
@@ -625,6 +626,13 @@ function getLabelSelectFields(labelSchema) {
 }
 
 async function main() {
+  const envCheck = checkEnvironment(process.env)
+  if (!envCheck.ok) {
+    console.error(`[guardian] ${envCheck.error} El servidor no arranca.`)
+    process.exit(1)
+  }
+  if (envCheck.warning) console.warn(`[guardian] ${envCheck.warning}`)
+
   let pool = await createPool()
   let labelSchema = buildLabelSchemaState([])
   if (pool) {
@@ -654,6 +662,7 @@ async function main() {
     res.json({
       ok: true,
       service: 'appetiquetado-sync',
+      env: envCheck.env,
       dbReady,
     })
   })
