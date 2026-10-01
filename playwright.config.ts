@@ -4,7 +4,7 @@ import { loadTestEnv } from './scripts/test-env.mjs'
 /**
  * Modo LOCAL (por defecto): entorno de PRUEBAS aislado.
  *   - Carga .env.test (BD local *_test, validada por el guardián) — nunca .env.
- *   - globalSetup recrea la BD con esquema + semilla.
+ *   - Antes de arrancar la API se recrea la BD con esquema + semilla (la API detecta el esquema al iniciar).
  *   - Levanta API en :3101 y Vite en :5174 (puertos propios: nunca reutiliza un servidor de desarrollo).
  * Modo REMOTO (E2E_REMOTE_URL=https://...): solo specs @smoke de lectura contra un entorno desplegado.
  */
@@ -23,7 +23,6 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   grep: REMOTE ? /@smoke/ : undefined,
-  globalSetup: REMOTE ? undefined : './tests/e2e/global-setup.ts',
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: WEB,
@@ -38,7 +37,7 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: 'node server/index.cjs',
+          command: 'node scripts/test-env.mjs reset && node server/index.cjs',
           url: `${API}/api/health`,
           env: testEnv,
           reuseExistingServer: false,
