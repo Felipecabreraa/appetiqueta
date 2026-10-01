@@ -16,6 +16,14 @@ function mapMovementError(code: string, http: number): string {
       return 'La etiqueta no existe en el servidor. Debe cargarse desde oficina antes de registrar lecturas.'
     case 'jc_first_read_required':
       return 'En el primer JC debe indicar el jefe de cuadrilla para guardar en el servidor.'
+    case 'jc_required':
+      return 'Primero debe registrar la salida de campo (JC). El acopio solo corresponde después.'
+    case 'jc_already_registered':
+      return 'Ya existe salida JC para esta etiqueta. El paso pendiente es la llegada al acopio.'
+    case 'acopio_required':
+      return 'El paso pendiente es la llegada al acopio.'
+    case 'already_complete':
+      return 'Esta etiqueta ya tiene salida JC y llegada a acopio. No se pueden añadir más lecturas.'
     case 'movements_table_missing':
       return 'El servidor no tiene la tabla de movimientos configurada.'
     case 'db':

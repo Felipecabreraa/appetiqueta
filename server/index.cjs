@@ -93,6 +93,8 @@ async function createPool() {
     database,
     waitForConnections: true,
     connectionLimit: 10,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
     dateStrings: false,
   })
   try {
@@ -1287,10 +1289,45 @@ async function main() {
         return res.status(404).json({ ok: false, error: 'label_not_found' })
       }
       const labelRow = labelRows[0]
-      const needsJcFirst =
-        payload.type === 'jc' &&
-        (labelRow.cantidad_totes === null || labelRow.cantidad_totes === undefined)
-      if (needsJcFirst) {
+      let movementRows = []
+      try {
+        // Lectura sin FOR UPDATE: el lock de la fila en `labels` ya serializa los movimientos de la
+        // misma etiqueta. Un FOR UPDATE aquí toma gap locks y genera deadlocks entre etiquetas distintas.
+        const [mRows] = await conn.execute(
+          `SELECT type FROM movements WHERE label_id = ?`,
+          [payload.labelId],
+        )
+        movementRows = mRows
+      } catch (mErr) {
+        if (mErr && typeof mErr === 'object' && mErr.code === 'ER_NO_SUCH_TABLE') {
+          await conn.rollback()
+          return res.status(503).json({ ok: false, error: 'movements_table_missing' })
+        }
+        throw mErr
+      }
+      const hasJc =
+        (labelRow.cantidad_totes !== null && labelRow.cantidad_totes !== undefined) ||
+        movementRows.some((row) => row.type === 'jc')
+      const hasAcopio = movementRows.some((row) => row.type === 'acopio')
+
+      if (hasJc && hasAcopio) {
+        await conn.rollback()
+        return res.status(409).json({ ok: false, error: 'already_complete' })
+      }
+      if (!hasJc && payload.type !== 'jc') {
+        await conn.rollback()
+        return res.status(409).json({ ok: false, error: 'jc_required' })
+      }
+      if (hasJc && payload.type === 'jc') {
+        await conn.rollback()
+        return res.status(409).json({ ok: false, error: 'jc_already_registered' })
+      }
+      if (hasJc && !hasAcopio && payload.type !== 'acopio') {
+        await conn.rollback()
+        return res.status(409).json({ ok: false, error: 'acopio_required' })
+      }
+
+      if (!hasJc) {
         const jefe = normalizeLimitedText(
           req.body?.jcFirstRead?.jefeCuadrilla ?? req.body?.jefeCuadrilla,
           255,

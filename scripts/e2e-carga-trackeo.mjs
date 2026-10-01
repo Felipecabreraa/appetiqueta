@@ -78,8 +78,10 @@ async function sleep(ms) {
 }
 
 async function req(path, options = {}, { retries = 6, base = API } = {}) {
+  const method = String(options.method || 'GET').toUpperCase()
+  const maxAttempts = method === 'GET' ? retries : 1
   let last
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const res = await fetch(`${base}${path}`, {
       ...options,
       headers: {
@@ -100,7 +102,7 @@ async function req(path, options = {}, { retries = 6, base = API } = {}) {
       res.status >= 500 ||
       data?.error === 'db' ||
       (typeof data?.error === 'string' && data.error.includes('ECONNRESET'))
-    if (!transient || attempt === retries) return last
+    if (!transient || attempt === maxAttempts) return last
     await sleep(250 * attempt)
   }
   return last
@@ -534,10 +536,11 @@ async function main() {
   )
   const raceOk = race.filter((r) => r.data?.ok).length
   const raceAfter = await req(`/api/labels/${raceLabel.id}`)
-  record(
-    'Carrera: 3 JC simultáneos sobre la misma etiqueta',
-    true,
-    `${raceOk}/3 aceptados; movimientos JC=${(raceAfter.data.movements || []).filter((m) => m.type === 'jc').length}; totes=${raceAfter.data.label?.cantidad_totes}`,
+  const raceJc = (raceAfter.data.movements || []).filter((m) => m.type === 'jc').length
+  assert(
+    'Carrera: solo un JC gana entre 3 simultáneos',
+    raceOk === 1 && raceJc === 1,
+    `${raceOk}/3 aceptados; movimientos JC=${raceJc}; totes=${raceAfter.data.label?.cantidad_totes}`,
   )
 
   // ---------- 7. Export Excel / reporte ----------
