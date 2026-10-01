@@ -1,0 +1,66 @@
+# CI: compuerta obligatoria para desplegar (Render usa autoDeployTrigger: checksPass).
+# Corre en push/PR a developer y main con una BD MySQL efímera (*_test): nunca toca staging ni producción.
+name: CI
+
+on:
+  push:
+    branches: [developer, main]
+  pull_request:
+    branches: [developer, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  calidad-y-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Mismo motor que staging/producción (trn.cl: MariaDB 10.6).
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci_root
+          MARIADB_DATABASE: appetiquetado_test
+          MARIADB_USER: appetiquetado_test
+          MARIADB_PASSWORD: ci_test_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Entorno de pruebas efímero (.env.test)
+        run: |
+          cat > .env.test <<'ENV'
+          MYSQL_HOST=127.0.0.1
+          MYSQL_USER=appetiquetado_test
+          MYSQL_PASSWORD=ci_test_pw
+          MYSQL_DATABASE=appetiquetado_test
+          PORT=3101
+          SUPERADMIN_USERNAME=superadmin
+          SUPERADMIN_PASSWORD=ci_superadmin_pw
+          E2E_USER=superadmin
+          E2E_PASS=ci_superadmin_pw
+          ENV
+      - name: Lint + typecheck + unit
+        run: npm run verify
+      - name: Build
+        run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: E2E UI (Playwright, desktop + móvil)
+        run: npm run test:e2e
+      - name: E2E API (lote + JC + acopio + concurrencia)
+        run: npm run test:e2e:api
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
