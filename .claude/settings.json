@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run verify)",
+      "Bash(npm test)",
+      "Bash(npm run test)",
+      "Bash(npm run test:coverage)",
+      "Bash(npm run test:e2e)",
+      "Bash(npm run test:e2e:api)",
+      "Bash(npm run test:all)",
+      "Bash(npm run db:test:reset)",
+      "Bash(npm run server:test)",
+      "Bash(npm run build)",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright test *)",
+      "Bash(npx playwright show-report *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git switch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git fetch *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(npm run server)",
+      "Bash(npm start)",
+      "Bash(npm run test:smoke:remote *)",
+      "Bash(npm run db:staging:init)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Read(./.env.production)",
+      "Read(./.env.staging)",
+      "Edit(./.env.staging)",
+      "Edit(./.env.production)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-push-gate.mjs\"",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

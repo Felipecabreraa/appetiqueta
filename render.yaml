@@ -1,20 +1,31 @@
-# Blueprint de Render: crea/actualiza el servicio al conectar el repo.
-# Cada push a la rama indicada dispara un deploy (comportamiento por defecto en Render).
-# Tras el primer deploy, completa en el dashboard las variables con sync: false.
+# Blueprint de Render — dos ambientes aislados.
+#
+#   rama developer  →  appetiqueta-dev  (PRUEBAS / staging)  →  BD trn_etiquetatest
+#   rama main       →  appetiqueta      (PRODUCCIÓN)         →  BD de producción
+#
+# Ambos solo despliegan si el CI de GitHub (.github/workflows/ci.yml) pasa (autoDeployTrigger: checksPass).
+# Cada servicio tiene SUS PROPIAS variables MYSQL_*: nunca copie las de producción en el de pruebas.
+# Variables con sync: false se completan en el dashboard (Render solo las pide al crear el servicio).
 
 services:
+  # ---------------------------------------------------------------- PRODUCCIÓN
   - type: web
     name: appetiqueta
     runtime: node
     plan: free
     region: oregon
     branch: main
-    buildCommand: npm install && npm run build
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: "22.12.0"
+      - key: APP_ENV
+        value: production
+      - key: VITE_APP_ENV
+        value: production
       - key: MYSQL_HOST
         sync: false
       - key: MYSQL_USER
@@ -23,6 +34,38 @@ services:
         sync: false
       - key: MYSQL_DATABASE
         sync: false
-      # Opcional: si la defines, define también VITE_SYNC_API_KEY en el mismo servicio y redeploy.
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      # Opcional: si la define, defina también VITE_SYNC_API_KEY con el mismo valor.
       - key: SYNC_API_KEY
+        sync: false
+
+  # ---------------------------------------------------------------- PRUEBAS (staging)
+  - type: web
+    name: appetiqueta-dev
+    runtime: node
+    plan: free
+    region: oregon
+    branch: developer
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.12.0"
+      - key: APP_ENV
+        value: staging
+      - key: VITE_APP_ENV
+        value: staging
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      # Debe ser exactamente trn_etiquetatest (BD de pruebas).
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: SUPERADMIN_PASSWORD
         sync: false
