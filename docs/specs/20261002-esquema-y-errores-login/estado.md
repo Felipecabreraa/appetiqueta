@@ -14,10 +14,10 @@
 - [x] 1 Levantamiento — compuerta 1 aprobada por el usuario el 2026-10-02 ("Sí, aprobado con las recomendadas"): P1 health 200 + campos de esquema; P2 (b) re-detección sin DDL, degradar; P3 tablas + flags de migraciones; P4 "No fue posible iniciar sesión."; P5 guía prod→staging en docs/AMBIENTES.md
 - [x] 2 Diseño — compuerta 2 aprobada por el usuario el 2026-10-02 ("Sí, aprobado")
 - [x] 3 Pruebas primero — unit: 4 suites rojas por la razón correcta; E2E UI 30 rojos (nuevos), API: e2e-esquema-arranque 17 rojos; existentes en verde. CA-05 no ejecutable en local (faltan MYSQL_ADMIN_* en .env.test), sí en CI.
-- [ ] 4 Implementación — en curso
-- [ ] 5 Verificación local
-- [ ] 6 E2E completo
-- [ ] 7 Revisión
+- [x] 4 Implementación — backend bf10431, 98422af, 2472712; frontend 19ac5d2, a7b1bc9. Lead aprueba: getSessionToken → string|null; texto "No se pudieron cargar los registros." en tablas de Maestros con error.
+- [x] 5 Verificación local — /verificar APTO (2026-10-02): lint/tsc/build ok, unit 211/211, E2E UI 152 ok + 8 skip intencionales (2.ª corrida; 1.ª: 1 flaky en multiusuario.spec.ts:110, aislado 55/55 ok), E2E API 43/43 + CA-27 + esquema-arranque OK (CA-05 omitido en local, corre en CI)
+- [ ] 6 E2E completo — en curso
+- [ ] 7 Revisión — en curso
 - [ ] 8 Staging
 - [ ] 9 Producción
 
@@ -25,4 +25,5 @@
 (vacío)
 
 ## Hallazgos fuera de alcance
-(vacío)
+- Inestable: `tests/e2e/multiusuario.spec.ts:110` (carrera de JC entre 2 celulares) falló 1 vez en la suite completa; aislado 55/55. Posible relación con el deadlock conocido de POST /api/movements. Investigar en otro ciclo.
+- (diseño) `OperationalJcForm.tsx`/`TrackingView.tsx` muestran el código crudo `db` si falla `/api/master-data/jc-foremen`; la importación Excel tampoco pasa por `describeApiError`.
