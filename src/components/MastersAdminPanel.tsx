@@ -145,6 +145,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [ok, setOk] = useState<string | null>(null)
   const [seasons, setSeasons] = useState<MasterSeason[]>([])
   const [companies, setCompanies] = useState<MasterCompany[]>([])
@@ -271,6 +272,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   async function reload() {
     setLoading(true)
     setError(null)
+    setLoadFailed(false)
     try {
       const data = await fetchMasterAdminData()
       setSeasons(data.seasons)
@@ -281,6 +283,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
       setVarieties(data.varieties)
       setRelations(data.relations)
     } catch (e) {
+      setLoadFailed(true)
       setError(e instanceof Error ? e.message : 'No se pudo cargar el módulo de maestros.')
     } finally {
       setLoading(false)
@@ -376,7 +379,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   )
   const listEmptyHint = loading
     ? 'Cargando registros…'
-    : error && counts[catalog] === 0
+    : loadFailed && counts[catalog] === 0
       ? 'No se pudieron cargar los registros.'
       : emptyHint(query, statusFilter, counts[catalog], catalog === 'relations' && seasonFilter > 0)
 
