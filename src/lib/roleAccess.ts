@@ -3,7 +3,7 @@ import type { UserRole } from '../types'
 
 const ROLE_TABS: Record<UserRole, AppTab[]> = {
   superadmin: ['dashboard', 'generar', 'trazabilidad', 'maestros', 'usuarios'],
-  admin: ['dashboard', 'generar', 'trazabilidad'],
+  admin: ['dashboard', 'generar', 'trazabilidad', 'maestros'],
   operador: ['generar', 'trazabilidad'],
 }
 

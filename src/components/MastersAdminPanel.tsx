@@ -10,7 +10,9 @@ import {
   upsertSpecies,
   upsertVariety,
 } from '../lib/masterDataApi'
+import { formatLastModified } from '../lib/masterAudit'
 import type {
+  MasterAudit,
   MasterCompany,
   MasterCsg,
   MasterJcForeman,
@@ -357,7 +359,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
     return (
       <section className="card">
         <h2>Mantenimiento en pantalla</h2>
-        <p className="sub">Sin permisos para editar maestros. Solo Super Admin puede mantener catálogos.</p>
+        <p className="sub">Sin permisos para editar maestros. Solo Admin y Super Admin pueden mantener catálogos.</p>
       </section>
     )
   }
@@ -382,8 +384,8 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
         <div>
           <h2 className="masters-admin-title">Mantenimiento en pantalla</h2>
           <p className="masters-admin-lead">
-            Alta y corrección puntual. La carga masiva sigue en Excel. Archivar oculta el dato en operación; no se
-            elimina.
+            Alta y corrección puntual. La carga masiva sigue en Excel. Marcar un registro como inactivo lo oculta en
+            operación; no se elimina.
           </p>
         </div>
         <button type="button" className="btn secondary" disabled={loading || saving} onClick={() => void reload()}>
@@ -515,7 +517,7 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
                   [
                     ['all', 'Todos'],
                     ['active', 'Activos'],
-                    ['inactive', 'Archivados'],
+                    ['inactive', 'Inactivos'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -555,8 +557,8 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
                     id: row.id,
                     code: row.code,
                     name: row.name,
-                    startsOn: row.starts_on || '',
-                    endsOn: row.ends_on || '',
+                    startsOn: (row.starts_on || '').slice(0, 10),
+                    endsOn: (row.ends_on || '').slice(0, 10),
                     isCurrent: Boolean(row.is_current),
                     isActive: Boolean(row.is_active),
                   })
@@ -850,7 +852,7 @@ function StatusChip({
 }) {
   if (current) return <span className="masters-chip masters-chip--current">Actual</span>
   if (active) return <span className="masters-chip masters-chip--ok">Activo</span>
-  return <span className="masters-chip">Archivado</span>
+  return <span className="masters-chip">Inactivo</span>
 }
 
 function CodeNameTable({
@@ -859,10 +861,10 @@ function CodeNameTable({
   emptyHint,
   onEdit,
 }: {
-  rows: Array<{ id: number; code: string; name: string; is_active: number }>
+  rows: Array<{ id: number; code: string; name: string; is_active: number } & MasterAudit>
   editingId: number
   emptyHint: string
-  onEdit: (row: { id: number; code: string; name: string; is_active: number }) => void
+  onEdit: (row: { id: number; code: string; name: string; is_active: number } & MasterAudit) => void
 }) {
   return (
     <div className="table-wrap masters-table-wrap">
@@ -879,7 +881,10 @@ function CodeNameTable({
           {rows.map((row) => (
             <tr key={row.id} className={editingId === row.id ? 'masters-row--active' : undefined}>
               <td className="nowrap">{row.code}</td>
-              <td>{row.name}</td>
+              <td>
+                {row.name}
+                <AuditNote row={row} />
+              </td>
               <td>
                 <StatusChip active={row.is_active} />
               </td>
@@ -901,6 +906,11 @@ function CodeNameTable({
       </table>
     </div>
   )
+}
+
+function AuditNote({ row }: { row: MasterAudit }) {
+  const text = formatLastModified(row)
+  return text ? <span className="masters-audit">{text}</span> : null
 }
 
 function SeasonTable({
@@ -930,7 +940,10 @@ function SeasonTable({
           {rows.map((row) => (
             <tr key={row.id} className={editingId === row.id ? 'masters-row--active' : undefined}>
               <td className="nowrap">{row.code}</td>
-              <td>{row.name}</td>
+              <td>
+                {row.name}
+                <AuditNote row={row} />
+              </td>
               <td className="nowrap">
                 {row.starts_on || '—'} · {row.ends_on || '—'}
               </td>
@@ -984,7 +997,10 @@ function VarietyTable({
           {rows.map((row) => (
             <tr key={row.id} className={editingId === row.id ? 'masters-row--active' : undefined}>
               <td className="nowrap">{row.code}</td>
-              <td>{row.name}</td>
+              <td>
+                {row.name}
+                <AuditNote row={row} />
+              </td>
               <td>{row.species_name || row.species_id}</td>
               <td>
                 <StatusChip active={row.is_active} />
@@ -1039,7 +1055,10 @@ function RelationTable({
           {rows.map((row) => (
             <tr key={row.id} className={editingId === row.id ? 'masters-row--active' : undefined}>
               <td className="nowrap">{row.season_code || row.season_id}</td>
-              <td>{row.company_name || row.company_id}</td>
+              <td>
+                {row.company_name || row.company_id}
+                <AuditNote row={row} />
+              </td>
               <td className="nowrap">{row.center_code}</td>
               <td>{row.species_name}</td>
               <td>{row.variety_name}</td>
@@ -1079,7 +1098,7 @@ function ActiveSelect({
       Estado
       <select value={boolValue(value)} onChange={(e) => onChange(e.target.value === '1')}>
         <option value="1">Activo</option>
-        <option value="0">Archivado</option>
+        <option value="0">Inactivo</option>
       </select>
     </label>
   )
@@ -1525,7 +1544,7 @@ function editorHint(catalog: CatalogId) {
   if (catalog === 'jcForemen') {
     return 'Estos nombres aparecen al registrar la primera lectura JC.'
   }
-  return 'Código y nombre deben ser únicos. Archive en lugar de borrar si ya se usó en operación.'
+  return 'Código y nombre deben ser únicos. Si ya se usó en operación, márquelo como inactivo en lugar de borrarlo.'
 }
 
 function emptyHint(query: string, statusFilter: StatusFilter, total: number, extraFilter = false) {

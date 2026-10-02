@@ -71,9 +71,17 @@ export async function importMasterRows(payload: {
 async function parseOrThrow<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `HTTP ${res.status}`)
+    throw new Error(describeApiError((data as { error?: string }).error, res.status))
   }
   return data
+}
+
+function describeApiError(code: string | undefined, status: number): string {
+  if (code === 'invalid_payload') {
+    return 'Datos inválidos: revise código, nombre y fechas (AAAA-MM-DD).'
+  }
+  if (code === 'forbidden') return 'No tiene permisos para esta acción.'
+  return code || `HTTP ${status}`
 }
 
 export async function fetchMasterAdminData(): Promise<{

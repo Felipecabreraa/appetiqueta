@@ -99,9 +99,10 @@ test('D5: fechas de temporada inválidas dan 400 invalid_payload; ISO con hora s
 test('Concurrencia: admin y superadmin editan el mismo registro a la vez; gana el último y updated_by coincide con sus datos', async ({ request }) => {
   const { A, S } = await actores(request)
   const code = `CONC${sufijo()}`
-  await postMaestro(request, S.token, RUTA.csg, { code, name: 'base' })
+  await postMaestro(request, S.token, RUTA.csg, { code, name: `base-${code}` })
   const base = await buscar(request, S.token, 'csg', code)
-  const nombres = { A: 'edita-admin', S: 'edita-super' }
+  const u = sufijo()
+  const nombres = { A: `edita-admin-${u}`, S: `edita-super-${u}` }
   for (let ronda = 0; ronda < 8; ronda++) {
     await pausa(30)
     const [ra, rs] = await Promise.all([
@@ -122,11 +123,11 @@ test('Concurrencia: admin y superadmin editan el mismo registro a la vez; gana e
 test('Concurrencia: guardar sin cambios en paralelo (admin y superadmin) no audita ni da error', async ({ request }) => {
   const { A, S } = await actores(request)
   const code = `PAR${sufijo()}`
-  await postMaestro(request, S.token, RUTA.csg, { code, name: 'estable' })
+  await postMaestro(request, S.token, RUTA.csg, { code, name: `estable-${code}` })
   const r0 = await buscar(request, S.token, 'csg', code)
   await pausa(80)
   const resultados = await Promise.all(
-    [A, S, A, S, A, S].map((u) => postMaestro(request, u.token, RUTA.csg, { id: r0.id, code, name: 'estable', isActive: true })),
+    [A, S, A, S, A, S].map((u) => postMaestro(request, u.token, RUTA.csg, { id: r0.id, code, name: `estable-${code}`, isActive: true })),
   )
   for (const r of resultados) expect(r.status).toBe(200)
   const r1 = await buscar(request, S.token, 'csg', code)
@@ -137,16 +138,16 @@ test('Concurrencia: guardar sin cambios en paralelo (admin y superadmin) no audi
 test('Concurrencia: dos ediciones idénticas en paralelo dan 200 y un único autor coherente', async ({ request }) => {
   const { A, S } = await actores(request)
   const code = `IDE${sufijo()}`
-  await postMaestro(request, S.token, RUTA.csg, { code, name: 'antes' })
+  await postMaestro(request, S.token, RUTA.csg, { code, name: `antes-${code}` })
   const r0 = await buscar(request, S.token, 'csg', code)
   await pausa(80)
   const [ra, rs] = await Promise.all([
-    postMaestro(request, A.token, RUTA.csg, { id: r0.id, code, name: 'despues' }),
-    postMaestro(request, S.token, RUTA.csg, { id: r0.id, code, name: 'despues' }),
+    postMaestro(request, A.token, RUTA.csg, { id: r0.id, code, name: `despues-${code}` }),
+    postMaestro(request, S.token, RUTA.csg, { id: r0.id, code, name: `despues-${code}` }),
   ])
   expect([ra.status, rs.status]).toEqual([200, 200])
   const r1 = await buscar(request, S.token, 'csg', code)
-  expect(r1.name).toBe('despues')
+  expect(r1.name).toBe(`despues-${code}`)
   expect([A.user.id, S.user.id]).toContain(r1.updatedBy?.id)
   expect(ms(r1.updatedAt)).toBeGreaterThan(ms(r0.updatedAt))
 })
@@ -157,6 +158,6 @@ test('CA-16 (API): token de admin emitido antes sirve de inmediato en maestros (
   const res1 = await request.get(`${process.env.E2E_API_BASE}/api/admin/masters`, { headers: { Authorization: `Bearer ${viejo}` } })
   expect(res1.status()).toBe(200)
   const code = `S16${sufijo()}`
-  expect((await postMaestro(request, viejo, RUTA.csg, { code, name: 'con token previo' })).status).toBe(200)
+  expect((await postMaestro(request, viejo, RUTA.csg, { code, name: `con token previo ${code}` })).status).toBe(200)
   expect((await buscar(request, S.token, 'csg', code)).createdBy?.id).toBe(A.user.id)
 })
