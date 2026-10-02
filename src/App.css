@@ -3192,6 +3192,10 @@ html.scroll-lock .modal-root {
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
+.alert.info {
+  border: 1px solid var(--border);
+}
+
 .alert.success {
   background: var(--ok-soft);
   color: var(--ok);
@@ -3826,4 +3830,40 @@ html.scroll-lock .modal-root {
   font-size: 0.78rem;
   color: var(--muted);
   white-space: normal;
+}
+
+.master-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.master-export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.master-export-field select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.master-export-notes .sub {
+  margin: 0.35rem 0 0;
+}
+
+@media (max-width: 560px) {
+  .master-export {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .master-export .btn {
+    width: 100%;
+  }
 }
