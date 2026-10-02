@@ -250,6 +250,22 @@ describe('ensureBaseTables', () => {
     expect(out).toMatch(/\[schema\].*ERROR.*auth_sessions.*ER_TABLEACCESS_DENIED_ERROR/)
   })
 
+  it('un schema.sql que el parser rechaza se registra distinto de "no se pudo leer" y no crea nada', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const file = join(mkdtempSync(join(tmpdir(), 'schema-')), 'schema.sql')
+    writeFileSync(file, 'CREATE TABLE IF NOT EXISTS uno (\n  id INT,\n  DROP COLUMN x\n);\n')
+    const pool = fakePool({ missing: ['auth_sessions'] })
+    const log = vi.fn()
+    const r = await boot.ensureBaseTables(pool, { log, schemaPath: file })
+    expect(r.created).toEqual([])
+    expect(creates(pool.sqls)).toHaveLength(0)
+    const out = log.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(out).toMatch(/\[schema\].*ERROR.*rechaz/i)
+    expect(out).not.toMatch(/no se pudo leer/)
+  })
+
   it('CA-05: si schema.sql no se puede leer no crea nada, no lanza y lo registra', async () => {
     const pool = fakePool({ missing: ['auth_sessions'] })
     const log = vi.fn()

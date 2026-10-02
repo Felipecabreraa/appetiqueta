@@ -20,13 +20,24 @@ type Detected = {
 type Locals = { labelSchema?: LabelSchema; mastersAuditReady?: boolean; schemaStatus?: Status }
 type Monitor = {
   refresh: (o?: { maxAgeMs?: number }) => Promise<Status>
-  onRouteError: (err: unknown, routeName: string) => Promise<boolean>
+  onRouteError: (
+    err: unknown,
+    routeName: string,
+    used?: { mastersAuditReady?: boolean; labelSchema?: LabelSchema },
+  ) => Promise<boolean>
 }
 type Mod = {
   BASE_TABLES: readonly string[]
   buildLabelSchemaState: (cols: string[]) => LabelSchema
   detectSchemaState: (pool: unknown) => Promise<Detected>
   isSchemaError: (err: unknown) => boolean
+  primeSchema: (o: {
+    monitor: Monitor
+    locals: Locals
+    mastersAuditReady: boolean
+    retries?: number
+    log?: (line: string) => void
+  }) => Promise<void>
   createSchemaMonitor: (o: {
     pool: unknown
     locals: Locals
@@ -368,5 +379,70 @@ describe('createSchemaMonitor', () => {
     await mon.onRouteError(dbErr('ER_BAD_FIELD_ERROR'), 'r')
     expect(p.sqls.length).toBeGreaterThan(0)
     for (const s of p.sqls) expect(s).toMatch(/^\s*SELECT/i)
+  })
+})
+
+describe('vuelta 2: detección que falla o tablas ausentes no degradan los flags', () => {
+  let t = 0
+  const now = () => t
+  const ALL: LabelSchema = { seasonId: true, companyId: true, seasonCostCenterId: true }
+  beforeEach(() => {
+    t = 0
+  })
+
+  it('detección con labels faltante no degrada labelSchema (el INSERT fallará con ER_NO_SUCH_TABLE)', async () => {
+    const p = fakePool({ missing: ['labels'] })
+    const locals: Locals = { labelSchema: { ...ALL }, mastersAuditReady: true }
+    const mon = m.createSchemaMonitor({ pool: p.pool, locals, now, log: vi.fn() })
+    const s = await mon.refresh({ maxAgeMs: 0 })
+    expect(s.missingTables).toEqual(['labels'])
+    expect(locals.labelSchema).toEqual(ALL)
+  })
+
+  it('detección con una tabla de maestros faltante no degrada mastersAuditReady', async () => {
+    const p = fakePool({ missing: ['seasons'] })
+    const locals: Locals = { labelSchema: { ...ALL }, mastersAuditReady: true }
+    const mon = m.createSchemaMonitor({ pool: p.pool, locals, now, log: vi.fn() })
+    const s = await mon.refresh({ maxAgeMs: 0 })
+    expect(s.mastersAuditReady).toBe(false)
+    expect(locals.mastersAuditReady).toBe(true)
+  })
+
+  it('primeSchema: si la detección inicial falla, locals conserva los flags de bootstrapSchema y reintenta', async () => {
+    const p = fakePool()
+    p.fail(dbErr('PROTOCOL_SEQUENCE_TIMEOUT'))
+    const locals: Locals = {}
+    const mon = m.createSchemaMonitor({ pool: p.pool, locals, now, log: vi.fn() })
+    await m.primeSchema({ monitor: mon, locals, mastersAuditReady: true, retries: 2, log: vi.fn() })
+    expect(p.calls()).toBe(3)
+    expect(locals.mastersAuditReady).toBe(true)
+    expect(locals.labelSchema).toEqual(ALL)
+  })
+
+  it('primeSchema: si el reintento tiene éxito usa lo detectado', async () => {
+    const p = fakePool({ noLabelCols: true })
+    const locals: Locals = {}
+    const mon = m.createSchemaMonitor({ pool: p.pool, locals, now, log: vi.fn() })
+    await m.primeSchema({ monitor: mon, locals, mastersAuditReady: true, log: vi.fn() })
+    expect(p.calls()).toBe(1)
+    expect(locals.labelSchema).toEqual({ seasonId: false, companyId: false, seasonCostCenterId: false })
+  })
+
+  it('onRouteError compara contra los flags que usó el intento, aunque otra ruta ya refrescó', async () => {
+    const p = fakePool()
+    const locals: Locals = {}
+    const mon = m.createSchemaMonitor({ pool: p.pool, locals, now, log: vi.fn() })
+    await mon.refresh({ maxAgeMs: 0 }) // auditoría lista
+    p.set({ noAudit: true })
+    t = 11_000
+    await mon.refresh({ maxAgeMs: 0 }) // otra ruta ya re-detectó: auditoría NO lista
+    t = 12_000
+    // el intento fallido había usado mastersAuditReady=true: hay que reintentar
+    const changed = await mon.onRouteError(dbErr('ER_BAD_FIELD_ERROR'), 'r', {
+      mastersAuditReady: true,
+      labelSchema: ALL,
+    })
+    expect(changed).toBe(true)
+    expect(p.calls()).toBe(2)
   })
 })
