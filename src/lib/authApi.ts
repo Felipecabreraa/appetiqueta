@@ -28,6 +28,9 @@ export async function login(username: string, password: string): Promise<LoginRe
       body: JSON.stringify({ username, password }),
     })
     const data: unknown = await res.json().catch(() => ({}))
+    if (res.status === 429) {
+      return { ok: false, message: 'Demasiados intentos de ingreso. Espere un minuto y vuelva a intentar.' }
+    }
     if (!res.ok) {
       return { ok: false, message: 'Credenciales inválidas o servidor no disponible.' }
     }

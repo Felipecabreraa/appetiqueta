@@ -8,6 +8,7 @@ const express = require('express')
 const cors = require('cors')
 const mysql = require('mysql2/promise')
 const { checkEnvironment } = require('./envGuard.cjs')
+const { createRateLimiter, limitFromEnv } = require('./rateLimit.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
 const distPath = path.join(__dirname, '..', 'dist')
@@ -144,6 +145,14 @@ async function ensureMovementsSchema(pool) {
       await pool.execute(`ALTER TABLE movements ADD COLUMN jh INT UNSIGNED NULL`)
       set.add('jh')
     }
+    if (!set.has('client_ip')) {
+      await pool.execute(`ALTER TABLE movements ADD COLUMN client_ip VARCHAR(45) NULL`)
+      set.add('client_ip')
+    }
+    if (!set.has('user_agent')) {
+      await pool.execute(`ALTER TABLE movements ADD COLUMN user_agent VARCHAR(255) NULL`)
+      set.add('user_agent')
+    }
     const [idxRows] = await pool.execute(
       `SELECT 1 AS ok FROM information_schema.STATISTICS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND INDEX_NAME = 'idx_movements_created_by'
@@ -192,7 +201,7 @@ async function ensureBaseData(pool) {
   )
 
   const username = (process.env.SUPERADMIN_USERNAME || 'superadmin').trim()
-  const password = (process.env.SUPERADMIN_PASSWORD || 'ChangeMe123!').trim()
+  const password = (process.env.SUPERADMIN_PASSWORD || '').trim()
   const fullName = (process.env.SUPERADMIN_NAME || 'Super Administrador').trim()
 
   const [roleRows] = await pool.execute('SELECT id FROM roles WHERE code = ? LIMIT 1', [ROLE.SUPERADMIN])
@@ -200,6 +209,12 @@ async function ensureBaseData(pool) {
   if (!roleId) return
 
   const [userRows] = await pool.execute('SELECT id FROM users WHERE username = ? LIMIT 1', [username])
+  if (userRows.length === 0 && !password) {
+    console.warn(
+      `[sync-api] SUPERADMIN_PASSWORD no definido: no se crea el usuario ${username} (no se usa una clave por defecto).`,
+    )
+    return
+  }
   if (userRows.length === 0) {
     await pool.execute(
       `INSERT INTO users (username, full_name, password_hash, role_id, is_active)
@@ -655,7 +670,19 @@ async function main() {
   app.locals.pool = pool
   app.locals.labelSchema = labelSchema
 
-  app.use(cors({ origin: true }))
+  // Render antepone un proxy: con TRUST_PROXY=1 req.ip es la IP real del cliente.
+  app.set('trust proxy', limitFromEnv('TRUST_PROXY', 1))
+  // La app se sirve desde el mismo origen; solo se habilita CORS para orígenes declarados.
+  const corsOrigins = String(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+  app.use(cors({ origin: corsOrigins.length ? corsOrigins : false }))
+
+  const MINUTE = 60_000
+  const limitMovements = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_MOVEMENTS_PER_MIN', 120) })
+  const limitLogin = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_LOGIN_PER_MIN', 10) })
+  const limitLabels = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_LABELS_PER_MIN', 300) })
   app.use(express.json({ limit: '8mb' }))
 
   app.get('/api/health', (_req, res) => {
@@ -667,7 +694,7 @@ async function main() {
     })
   })
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', limitLogin, async (req, res) => {
     if (!requireDb(pool, res)) return
     const username = String(req.body?.username || '')
       .trim()
@@ -1204,7 +1231,7 @@ async function main() {
     },
   )
 
-  app.get('/api/labels/:id', async (req, res) => {
+  app.get('/api/labels/:id', limitLabels, async (req, res) => {
     if (!requireDb(pool, res)) return
     const id = String(req.params.id || '')
       .trim()
@@ -1280,7 +1307,7 @@ async function main() {
 
   // Escaneo en terreno (?e=): sin sesión; si hay Bearer válido se guarda created_by.
   // Fuente del Excel global (GET /api/reports/tracking-export): solo filas insertadas aquí.
-  app.post('/api/movements', optionalAuthMiddleware, async (req, res) => {
+  app.post('/api/movements', limitMovements, optionalAuthMiddleware, async (req, res) => {
     if (!requireDb(pool, res)) return
     const payload = normalizeMovementInput(req.body?.movement || req.body)
     if (!payload) {
@@ -1351,8 +1378,9 @@ async function main() {
         )
       }
       await conn.execute(
-        `INSERT INTO movements (label_id, type, cantidad, at, registered_by, precio_clp, jh, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO movements
+           (label_id, type, cantidad, at, registered_by, precio_clp, jh, created_by, client_ip, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           payload.labelId,
           payload.type,
@@ -1362,6 +1390,8 @@ async function main() {
           payload.precioClp,
           payload.jh,
           req.auth?.userId ?? null,
+          String(req.ip || '').slice(0, 45) || null,
+          String(req.get('user-agent') || '').slice(0, 255) || null,
         ],
       )
       await conn.commit()

@@ -24,6 +24,8 @@ function mapMovementError(code: string, http: number): string {
       return 'El paso pendiente es la llegada al acopio.'
     case 'already_complete':
       return 'Esta etiqueta ya tiene salida JC y llegada a acopio. No se pueden añadir más lecturas.'
+    case 'rate_limited':
+      return 'Demasiadas lecturas seguidas desde esta conexión. Espere un minuto y vuelva a intentar.'
     case 'movements_table_missing':
       return 'El servidor no tiene la tabla de movimientos configurada.'
     case 'db':

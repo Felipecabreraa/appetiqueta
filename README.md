@@ -55,7 +55,10 @@ Incluye:
 - `PORT` o `SYNC_API_PORT`
 - `SYNC_API_KEY` (opcional para endpoint de batch)
 - `SUPERADMIN_USERNAME` (opcional, por defecto `superadmin`)
-- `SUPERADMIN_PASSWORD` (opcional, por defecto `ChangeMe123!`)
+- `SUPERADMIN_PASSWORD` (requerido para crear el superadmin inicial; sin él no se crea)
+- `CORS_ORIGINS` (opcional, orígenes externos permitidos separados por coma; por defecto ninguno)
+- `RATE_LIMIT_MOVEMENTS_PER_MIN` / `RATE_LIMIT_LOGIN_PER_MIN` / `RATE_LIMIT_LABELS_PER_MIN` (por IP; por defecto 120 / 10 / 300)
+- `TRUST_PROXY` (por defecto `1`, para Render)
 - `SUPERADMIN_NAME` (opcional)
 - `SESSION_TTL_HOURS` (opcional, por defecto `12`)
 
