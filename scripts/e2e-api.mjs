@@ -29,6 +29,20 @@ if (esquema !== 0) {
   process.exit(esquema)
 }
 
+// CA-19: exportar y reimportar 5000 relaciones. Arranca su propia API y resetea la BD antes y después
+// (--experimental-strip-types: carga src/lib/masterExcel.ts con Node, sin compilar).
+const volumen = await new Promise((resolve) => {
+  const run = spawn(process.execPath, ['--experimental-strip-types', 'scripts/e2e-exportar-volumen.mjs'], {
+    env: { ...process.env, ...env },
+    stdio: 'inherit',
+  })
+  run.on('exit', (code) => resolve(code ?? 1))
+})
+if (volumen !== 0) {
+  console.error('La prueba de volumen de exportación de maestros (CA-19) falló.')
+  process.exit(volumen)
+}
+
 await resetTestDb(env)
 const api = `http://127.0.0.1:${env.PORT}`
 const childEnv = { ...process.env, ...env }

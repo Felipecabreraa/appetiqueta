@@ -1,63 +1,108 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { importMasterRows } from '../lib/masterDataApi'
+import { fetchMasterAdminData, importMasterRows } from '../lib/masterDataApi'
+import {
+  buildMastersExport,
+  buildTemplateWorkbook,
+  IMPORT_ROW_LIMIT,
+  importedSeasonCode,
+  parseMasterWorkbook,
+  type MasterBundle,
+  type MasterImportRow,
+} from '../lib/masterExcel'
 
-type MasterRow = {
-  empresa: string
-  cc: string
-  especie: string
-  variedad: string
-  csg: string
-}
+type SeasonsLoad = 'loading' | 'ready' | 'error'
+type ExportMessage = { kind: 'error' | 'info'; text: string }
 
-function normalizeHeaders(row: Record<string, unknown>): MasterRow | null {
-  const get = (...keys: string[]) => {
-    for (const key of keys) {
-      const value = row[key]
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
-        return String(value).trim()
-      }
-    }
-    return ''
-  }
-  const parsed: MasterRow = {
-    empresa: get('empresa', 'Empresa', 'EMPRESA'),
-    cc: get('cc', 'CC', 'centro_costo', 'CentroCosto', 'centroCosto'),
-    especie: get('especie', 'Especie', 'ESPECIE'),
-    variedad: get('variedad', 'Variedad', 'VARIEDAD'),
-    csg: get('csg', 'CSG'),
-  }
-  if (!parsed.empresa || !parsed.cc || !parsed.especie || !parsed.variedad || !parsed.csg) {
-    return null
-  }
-  return parsed
-}
+const EXPORT_LOAD_ERROR = 'No se pudieron obtener los maestros. Intente nuevamente.'
 
 export function MasterDataView({ onImported }: { onImported: () => void }) {
   const [seasonCode, setSeasonCode] = useState('')
   const [seasonName, setSeasonName] = useState('')
   const [isCurrent, setIsCurrent] = useState(true)
-  const [rows, setRows] = useState<MasterRow[]>([])
+  const [rows, setRows] = useState<MasterImportRow[]>([])
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const [bundle, setBundle] = useState<MasterBundle | null>(null)
+  const [seasonsLoad, setSeasonsLoad] = useState<SeasonsLoad>('loading')
+  const [exportSeasonId, setExportSeasonId] = useState<number | null>(null)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportMessage, setExportMessage] = useState<ExportMessage | null>(null)
+  const exportingRef = useRef(false)
+
   const distinctCompanies = useMemo(() => new Set(rows.map((r) => r.empresa)).size, [rows])
 
+  /** Aplica un bundle fresco: guarda los datos y conserva la temporada elegida (o la actual, o la primera). */
+  const applyBundle = useCallback((data: MasterBundle) => {
+    setBundle(data)
+    setExportSeasonId((prev) => {
+      if (prev !== null && data.seasons.some((s) => s.id === prev)) return prev
+      const current = data.seasons.find((s) => s.is_current === 1) ?? data.seasons[0]
+      return current ? current.id : null
+    })
+  }, [])
+
+  const loadSeasons = useCallback(async () => {
+    setSeasonsLoad('loading')
+    setExportMessage(null)
+    try {
+      applyBundle(await fetchMasterAdminData())
+      setSeasonsLoad('ready')
+    } catch {
+      setSeasonsLoad('error')
+    }
+  }, [applyBundle])
+
+  useEffect(() => {
+    void loadSeasons()
+  }, [loadSeasons])
+
+  const seasons = bundle?.seasons ?? []
+  const selectedSeason = seasons.find((s) => s.id === exportSeasonId) ?? null
+  const exportReady = seasonsLoad === 'ready' && selectedSeason !== null
+
   function downloadTemplate() {
-    const templateRows = [
-      {
-        EMPRESA: 'EMPRESA EJEMPLO SPA',
-        ESPECIE: 'CEREZA',
-        VARIEDAD: 'LAPINS',
-        CC: 'CC-001',
-        CSG: '12345',
-      },
-    ]
-    const sheet = XLSX.utils.json_to_sheet(templateRows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, sheet, 'Plantilla')
-    XLSX.writeFile(wb, 'plantilla-maestros-etiquetado.xlsx')
+    XLSX.writeFile(buildTemplateWorkbook(), 'plantilla-maestros-etiquetado.xlsx')
+  }
+
+  async function exportMasters() {
+    if (exportingRef.current || exportSeasonId === null) return
+    exportingRef.current = true
+    setExportBusy(true)
+    setExportMessage(null)
+    const fallbackCode = selectedSeason?.code ?? ''
+    try {
+      let data: MasterBundle
+      try {
+        data = await fetchMasterAdminData()
+      } catch {
+        setExportMessage({ kind: 'error', text: EXPORT_LOAD_ERROR })
+        return
+      }
+      applyBundle(data)
+      const result = buildMastersExport(data, exportSeasonId, new Date())
+      if (result.kind === 'empty') {
+        setExportMessage({
+          kind: 'info',
+          text: `La temporada ${result.seasonCode || fallbackCode} no tiene relaciones activas para exportar.`,
+        })
+        return
+      }
+      XLSX.writeFile(result.workbook, result.fileName)
+      if (result.overImportLimit) {
+        setExportMessage({
+          kind: 'info',
+          text: `El archivo tiene ${result.rowCount} filas; la importación acepta hasta ${IMPORT_ROW_LIMIT} por carga.`,
+        })
+      }
+    } catch {
+      setExportMessage({ kind: 'error', text: 'No se pudo generar el archivo Excel. Intente nuevamente.' })
+    } finally {
+      exportingRef.current = false
+      setExportBusy(false)
+    }
   }
 
   function onPickFile(file: File) {
@@ -68,11 +113,7 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
       try {
         const data = new Uint8Array(reader.result as ArrayBuffer)
         const wb = XLSX.read(data, { type: 'array' })
-        const sheet = wb.Sheets[wb.SheetNames[0] || '']
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-        const parsed = json
-          .map(normalizeHeaders)
-          .filter((row): row is MasterRow => Boolean(row))
+        const parsed = parseMasterWorkbook(wb)
         if (parsed.length === 0) {
           setError('No se encontraron filas válidas en el Excel.')
           return
@@ -105,6 +146,7 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
       })
       setStatus(`Carga completada: ${result.applied} filas aplicadas de ${result.received}.`)
       onImported()
+      void loadSeasons()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar maestros.')
     } finally {
@@ -115,7 +157,7 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
   return (
     <section className="card">
       <h2>Carga maestra desde Excel</h2>
-      <p className="sub">Columnas esperadas: empresa, cc, especie, variedad, csg.</p>
+      <p className="sub">Columnas esperadas: EMPRESA, ESPECIE, VARIEDAD, CC, CSG y NOMBRE CC (opcional).</p>
       <div className="label-form">
         <div className="form-grid">
           <label>
@@ -166,9 +208,70 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
           <button type="button" className="btn secondary" onClick={downloadTemplate}>
             Descargar plantilla Excel
           </button>
+          <div className="master-export">
+            <label className="master-export-field">
+              Temporada a exportar
+              <select
+                value={exportSeasonId ?? ''}
+                disabled={!exportReady || exportBusy}
+                onChange={(e) => {
+                  setExportSeasonId(Number(e.target.value))
+                  setExportMessage(null)
+                }}
+              >
+                {seasons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {`${s.code} - ${s.name}${s.is_active === 1 ? '' : ' (inactiva)'}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={!exportReady || exportBusy}
+              onClick={() => void exportMasters()}
+            >
+              {exportBusy ? 'Exportando...' : 'Exportar maestros a Excel'}
+            </button>
+            {seasonsLoad === 'error' && (
+              <button type="button" className="btn secondary" onClick={() => void loadSeasons()}>
+                Reintentar
+              </button>
+            )}
+          </div>
           <button type="button" className="btn primary" disabled={busy} onClick={() => void submitImport()}>
             {busy ? 'Importando...' : 'Importar maestros'}
           </button>
+        </div>
+        <div className="master-export-info">
+          <div role="status">
+            {seasonsLoad === 'error' && <p className="alert error">{EXPORT_LOAD_ERROR}</p>}
+            {seasonsLoad === 'ready' && seasons.length === 0 && (
+              <p className="alert info">No hay temporadas para exportar.</p>
+            )}
+            {exportMessage && <p className={`alert ${exportMessage.kind}`}>{exportMessage.text}</p>}
+          </div>
+          {exportReady && selectedSeason && (
+            <div className="master-export-notes">
+              <p className="sub">
+                {`Para reimportar, use el mismo código y nombre de temporada: «${selectedSeason.code}» / «${selectedSeason.name}».`}
+              </p>
+              <p className="sub">
+                {selectedSeason.is_current === 1
+                  ? 'Es la temporada actual: al reimportar, deje «Marcar como temporada actual» en Sí.'
+                  : 'No es la temporada actual: al reimportar, elija «Marcar como temporada actual» = No, o pasará a ser la actual.'}
+              </p>
+              {selectedSeason.is_active !== 1 && (
+                <p className="sub">Esta temporada está inactiva: reimportarla la reactivará.</p>
+              )}
+              {importedSeasonCode(selectedSeason.code) !== selectedSeason.code && (
+                <p className="sub">
+                  {`La importación convierte este código en «${importedSeasonCode(selectedSeason.code)}» y crearía otra temporada; corrija el código en Mantenimiento antes de reimportar.`}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </section>

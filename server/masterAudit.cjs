@@ -134,9 +134,13 @@ function buildAuditedInsert(table, cols, { audit }) {
   }
 }
 
+function buildImportChangeCondition(cols) {
+  return cols.map((c) => cmp(c.col, c.expr, c.text)).join(' AND ')
+}
+
 function buildImportAuditClause(cols, { audit }) {
   if (!audit) return ''
-  const cond = cols.map((c) => cmp(c.col, c.expr, c.text)).join(' AND ')
+  const cond = buildImportChangeCondition(cols)
   return `updated_by = IF(${cond}, updated_by, NULL)`
 }
 
@@ -229,6 +233,7 @@ module.exports = {
   buildAuditedUpdate,
   buildAuditedInsert,
   buildImportAuditClause,
+  buildImportChangeCondition,
   buildUnsetCurrentSeason,
   auditSelect,
   auditJoins,

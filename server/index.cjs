@@ -18,6 +18,7 @@ const {
   mapAuditRow,
   normalizeSeasonDate,
 } = require('./masterAudit.cjs')
+const { createCatalogResolver, buildRelationImportUpsert } = require('./masterImport.cjs')
 const { bootstrapSchema } = require('./schemaBootstrap.cjs')
 const { buildLabelSchemaState, createSchemaMonitor, primeSchema } = require('./schemaState.cjs')
 const { createRateLimiter, limitFromEnv, clientIpOf } = require('./rateLimit.cjs')
@@ -384,54 +385,6 @@ async function resolveLabelCatalog(conn, payload) {
 }
 
 const withAuditClause = (clause) => (clause ? `${clause},` : '')
-
-async function upsertByCodeAndName(conn, table, code, name, audit) {
-  const safeCode = toCode(code || name)
-  const safeName = normalizeMasterName(name || code)
-  const clause = buildImportAuditClause(
-    [
-      { col: 'name', expr: 'VALUES(name)', text: true },
-      { col: 'is_active', expr: '1' },
-    ],
-    { audit },
-  )
-  await conn.execute(
-    `INSERT INTO ${table} (code, name, is_active)
-     VALUES (?, ?, 1)
-     ON DUPLICATE KEY UPDATE
-       ${withAuditClause(clause)}
-       name = VALUES(name),
-       is_active = 1`,
-    [safeCode, safeName],
-  )
-  const [rows] = await conn.execute(`SELECT id FROM ${table} WHERE code = ? LIMIT 1`, [safeCode])
-  return rows[0]?.id
-}
-
-async function resolveVariety(conn, speciesId, varietyName, audit) {
-  const code = toCode(varietyName)
-  const name = normalizeMasterName(varietyName)
-  const clause = buildImportAuditClause(
-    [
-      { col: 'name', expr: 'VALUES(name)', text: true },
-      { col: 'species_id', expr: 'VALUES(species_id)' },
-      { col: 'is_active', expr: '1' },
-    ],
-    { audit },
-  )
-  await conn.execute(
-    `INSERT INTO varieties (code, name, species_id, is_active)
-     VALUES (?, ?, ?, 1)
-     ON DUPLICATE KEY UPDATE
-       ${withAuditClause(clause)}
-       name = VALUES(name),
-       species_id = VALUES(species_id),
-       is_active = 1`,
-    [code, name, speciesId],
-  )
-  const [rows] = await conn.execute('SELECT id FROM varieties WHERE code = ? LIMIT 1', [code])
-  return rows[0]?.id
-}
 
 async function resolveSeason(conn, seasonInput, audit) {
   const code = toCode(seasonInput?.code || seasonInput?.name || 'TEMPORADA_GENERAL')
@@ -906,19 +859,9 @@ async function main() {
         const seasonId = await resolveSeason(conn, req.body?.season || {}, audit)
         if (!seasonId) throw new Error('season_error')
 
-        const sccAuditClause = withAuditClause(
-          buildImportAuditClause(
-            [
-              { col: 'center_name', expr: 'VALUES(center_name)', text: true },
-              { col: 'species_id', expr: 'VALUES(species_id)' },
-              { col: 'variety_id', expr: 'VALUES(variety_id)' },
-              { col: 'csg_id', expr: 'VALUES(csg_id)' },
-              { col: 'is_active', expr: '1' },
-              { col: 'source', expr: "'excel'", text: true },
-            ],
-            { audit },
-          ),
-        )
+        const resolver = createCatalogResolver(conn, { audit, toCode })
+        const upsertWithName = buildRelationImportUpsert({ audit, withCenterName: true })
+        const upsertKeepName = buildRelationImportUpsert({ audit, withCenterName: false })
         let applied = 0
         for (const raw of rows) {
           const empresa = normalizeMasterName(raw?.empresa)
@@ -927,33 +870,25 @@ async function main() {
           const variedad = normalizeMasterName(raw?.variedad)
           const csg = normalizeMasterName(raw?.csg)
           if (!empresa || !centroCosto || !especie || !variedad || !csg) continue
+          const ccNombre = normalizeLimitedText(raw?.ccNombre, 180)
 
-          const companyId = await upsertByCodeAndName(conn, 'companies', empresa, empresa, audit)
-          const speciesId = await upsertByCodeAndName(conn, 'species', especie, especie, audit)
-          const varietyId = await resolveVariety(conn, speciesId, variedad, audit)
-          const csgId = await upsertByCodeAndName(conn, 'csg_catalog', csg, csg, audit)
+          const companyId = await resolver.company(empresa)
+          const speciesId = await resolver.species(especie)
+          const varietyId = await resolver.variety(speciesId, variedad)
+          const csgId = await resolver.csg(csg)
 
+          const upsert = ccNombre !== '' ? upsertWithName : upsertKeepName
           await conn.execute(
-            `INSERT INTO season_cost_centers
-               (season_id, company_id, center_code, center_name, species_id, variety_id, csg_id, is_active, source)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'excel')
-             ON DUPLICATE KEY UPDATE
-               ${sccAuditClause}
-               center_name = VALUES(center_name),
-               species_id = VALUES(species_id),
-               variety_id = VALUES(variety_id),
-               csg_id = VALUES(csg_id),
-               is_active = 1,
-               source = 'excel'`,
-            [
+            upsert.sql,
+            upsert.params({
               seasonId,
               companyId,
-              centroCosto,
-              normalizeMasterName(raw?.ccNombre || ''),
+              centerCode: centroCosto,
+              centerName: ccNombre,
               speciesId,
               varietyId,
               csgId,
-            ],
+            }),
           )
           applied++
         }
