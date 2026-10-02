@@ -225,6 +225,17 @@ async function ensureBaseData(pool) {
   }
 }
 
+/** Si la BD rechaza la conexión se responde 503 en vez de dejar una promesa rechazada que tumba el proceso. */
+async function getConnectionOr503(pool, res) {
+  try {
+    return await pool.getConnection()
+  } catch (error) {
+    console.error('[sync-api] No se obtuvo conexión a la BD:', error.code || error.message || error)
+    res.status(503).json({ ok: false, error: 'db_unavailable' })
+    return null
+  }
+}
+
 function requireDb(pool, res) {
   if (pool) return true
   res.status(503).json({ ok: false, error: 'db_not_configured' })
@@ -331,6 +342,10 @@ function normalizeLabelInput(item) {
   }
 }
 
+const MAX_TOTES = 100_000
+const MAX_PRECIO_CLP = 100_000_000
+const MAX_JH = 10_000
+
 function normalizeMovementInput(item) {
   const labelId = String(item?.labelId || item?.label_id || '')
     .trim()
@@ -342,11 +357,13 @@ function normalizeMovementInput(item) {
     .toLowerCase()
   if (type !== 'jc' && type !== 'acopio') return null
 
+  // Enteros exactos: nunca se redondea en silencio lo que ingresó el operario.
   const cantidad = Number(item?.cantidad)
-  if (!Number.isFinite(cantidad) || cantidad < 0) return null
+  if (!Number.isInteger(cantidad) || cantidad < 0 || cantidad > MAX_TOTES) return null
+  if (type === 'jc' && cantidad < 1) return null
 
-  const at = item?.at ? new Date(item.at) : new Date()
-  if (Number.isNaN(at.getTime())) return null
+  // La hora la fija el servidor: el reloj del celular puede estar mal configurado.
+  const at = new Date()
 
   const registeredBy = normalizeLimitedText(item?.registeredBy ?? item?.registered_by, 120)
   const rawPrecio = item?.precioClp ?? item?.precio_clp
@@ -354,23 +371,23 @@ function normalizeMovementInput(item) {
     rawPrecio === null || rawPrecio === undefined || rawPrecio === ''
       ? null
       : Number(rawPrecio)
-  if (precioClp !== null && (!Number.isFinite(precioClp) || precioClp < 0)) return null
+  if (precioClp !== null && (!Number.isInteger(precioClp) || precioClp < 0 || precioClp > MAX_PRECIO_CLP)) return null
 
   const rawJh = item?.jh
   const jh =
     rawJh === null || rawJh === undefined || rawJh === ''
       ? null
       : Number(rawJh)
-  if (jh !== null && (!Number.isFinite(jh) || jh < 0)) return null
+  if (jh !== null && (!Number.isInteger(jh) || jh < 0 || jh > MAX_JH)) return null
 
   return {
     labelId,
     type,
-    cantidad: Math.floor(cantidad),
+    cantidad,
     at,
     registeredBy,
-    precioClp: precioClp === null ? null : Math.floor(precioClp),
-    jh: jh === null ? null : Math.floor(jh),
+    precioClp,
+    jh,
   }
 }
 
@@ -680,9 +697,15 @@ async function main() {
   app.use(cors({ origin: corsOrigins.length ? corsOrigins : false }))
 
   const MINUTE = 60_000
-  const limitMovements = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_MOVEMENTS_PER_MIN', 120) })
-  const limitLogin = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_LOGIN_PER_MIN', 10) })
-  const limitLabels = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_LABELS_PER_MIN', 300) })
+  // Límites holgados: una cuadrilla grande puede compartir IP (wifi del acopio, CGNAT móvil).
+  const limitMovements = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_MOVEMENTS_PER_MIN', 600) })
+  const limitLabels = createRateLimiter({ windowMs: MINUTE, max: limitFromEnv('RATE_LIMIT_LABELS_PER_MIN', 1200) })
+  // En login solo cuentan los intentos fallidos: muchos usuarios entrando al inicio del turno no se bloquean.
+  const limitLogin = createRateLimiter({
+    windowMs: MINUTE,
+    max: limitFromEnv('RATE_LIMIT_LOGIN_PER_MIN', 10),
+    countIf: (res) => res.statusCode === 401,
+  })
   app.use(express.json({ limit: '8mb' }))
 
   app.get('/api/health', (_req, res) => {
@@ -691,6 +714,8 @@ async function main() {
       service: 'appetiquetado-sync',
       env: envCheck.env,
       dbReady,
+      // Permite verificar en Render que la IP real del cliente se detecta tras el proxy (límites por IP).
+      clientIp: _req.ip,
     })
   })
 
@@ -890,7 +915,8 @@ async function main() {
       if (rows.length === 0) return res.status(400).json({ ok: false, error: 'rows_required' })
       if (rows.length > 10000) return res.status(400).json({ ok: false, error: 'rows_too_large' })
 
-      const conn = await pool.getConnection()
+      const conn = await getConnectionOr503(pool, res)
+    if (!conn) return
       try {
         await conn.beginTransaction()
         const seasonId = await resolveSeason(conn, req.body?.season || {})
@@ -982,7 +1008,8 @@ async function main() {
       const endsOn = normalizeMasterName(req.body?.endsOn) || null
       const isCurrent = toBit(req.body?.isCurrent, 0)
       const isActive = toBit(req.body?.isActive, 1)
-      const conn = await pool.getConnection()
+      const conn = await getConnectionOr503(pool, res)
+    if (!conn) return
       try {
         await conn.beginTransaction()
         if (id) {
@@ -1283,7 +1310,8 @@ async function main() {
       payloads.push(payload)
     }
 
-    const conn = await pool.getConnection()
+    const conn = await getConnectionOr503(pool, res)
+    if (!conn) return
     try {
       await conn.beginTransaction()
       const labelSchema = app.locals.labelSchema || buildLabelSchemaState([])
@@ -1313,7 +1341,8 @@ async function main() {
     if (!payload) {
       return res.status(400).json({ ok: false, error: 'invalid_movement' })
     }
-    const conn = await pool.getConnection()
+    const conn = await getConnectionOr503(pool, res)
+    if (!conn) return
     try {
       await conn.beginTransaction()
       const [labelRows] = await conn.execute(
@@ -1371,6 +1400,10 @@ async function main() {
         if (!jefe) {
           await conn.rollback()
           return res.status(400).json({ ok: false, error: 'jc_first_read_required' })
+        }
+        if (payload.precioClp === null || payload.jh === null) {
+          await conn.rollback()
+          return res.status(400).json({ ok: false, error: 'jc_data_required' })
         }
         await conn.execute(
           `UPDATE labels SET cantidad_totes = ?, jefe_cuadrilla = ? WHERE id = ?`,
@@ -1488,6 +1521,11 @@ async function main() {
     console.log(`[sync-api] ${mode} http://0.0.0.0:${PORT} (MySQL: ${process.env.MYSQL_DATABASE})`)
   })
 }
+
+// Red de seguridad: un error asíncrono no capturado se registra, pero no detiene el servicio para todos los usuarios.
+process.on('unhandledRejection', (reason) => {
+  console.error('[sync-api] unhandledRejection:', reason)
+})
 
 main().catch((error) => {
   console.error(error)

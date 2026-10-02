@@ -29,7 +29,7 @@ export async function syncLabelOperationalFromServer(
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   try {
-    const res = await fetch(url, { method: 'GET', headers })
+    const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(20_000) })
     if (res.status === 404) {
       return { ok: false, error: 'not_found' }
     }

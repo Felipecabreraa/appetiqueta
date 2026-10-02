@@ -3,7 +3,7 @@ import type { Movement, MovementType } from '../types'
 import { QrScanTestModal } from './QrScanTestModal'
 import { exportTrackingsExcel } from '../lib/exportTrackingsExcel'
 import { getStoredOperatorName } from '../lib/operatorProfile'
-import { pushMovementToServer } from '../lib/pushMovementToServer'
+import { pushMovementToServer, STALE_STATE_CODES } from '../lib/pushMovementToServer'
 import { fetchTrackingExportPayload } from '../lib/trackingExportApi'
 import { fetchJcForemen } from '../lib/masterDataApi'
 import { normalizeTrackingCodeFromQrPayload } from '../lib/navigateFromQrScan'
@@ -43,6 +43,7 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   const [cantidad, setCantidad] = useState<number>(0)
   const [jefeCuadrilla, setJefeCuadrilla] = useState('')
   const [jh, setJh] = useState<number | ''>('')
+  const [precioClp, setPrecioClp] = useState<number | ''>('')
   const [jefesCuadrilla, setJefesCuadrilla] = useState<Array<{ id: number; name: string }>>([])
   const [jefesCuadrillaError, setJefesCuadrillaError] = useState<string | null>(null)
   const [, setTick] = useState(0)
@@ -160,6 +161,16 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
   }, [])
 
   async function register() {
+    if (registerBusy) return
+    setRegisterBusy(true)
+    try {
+      await registerInner()
+    } finally {
+      setRegisterBusy(false)
+    }
+  }
+
+  async function registerInner() {
     setMsg(null)
     setMsgTone(null)
     const id = code.trim().toUpperCase()
@@ -198,8 +209,8 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       setMsgTone('err')
       return
     }
-    if (cantidad < 0 || !Number.isFinite(cantidad)) {
-      setMsg('Cantidad inválida.')
+    if (cantidad < 0 || !Number.isInteger(cantidad)) {
+      setMsg('Cantidad inválida: use un número entero de totes.')
       setMsgTone('err')
       return
     }
@@ -215,6 +226,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
         const jefe = jefeCuadrilla.trim()
         if (jefe === '') {
           setMsg('En el primer trackeo JC debe ingresar el jefe de cuadrilla.')
+          setMsgTone('err')
+          return
+        }
+        if (precioClp === '' || !Number.isInteger(precioClp) || precioClp < 0) {
+          setMsg('En el primer trackeo JC indique el precio en CLP (número entero, sin decimales).')
           setMsgTone('err')
           return
         }
@@ -236,38 +252,39 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
     }
     if (primeraJc) {
       movement.jh = jh as number
+      movement.precioClp = precioClp as number
     }
     const jcFirstRead =
       tipo === 'jc' && found.cantidadTotes === null
         ? { jefeCuadrilla: jefeCuadrilla.trim() }
         : undefined
 
-    setRegisterBusy(true)
-    try {
-      const pushed = await pushMovementToServer(
-        movement,
-        jcFirstRead ? { jcFirstRead } : undefined,
-      )
-      if (pushed.ok === false) {
-        setMsg(pushed.error)
-        setMsgTone('err')
-        return
+    const pushed = await pushMovementToServer(
+      movement,
+      jcFirstRead ? { jcFirstRead } : undefined,
+    )
+    if (pushed.ok === false) {
+      setMsg(pushed.error)
+      setMsgTone('err')
+      // Otro dispositivo registró antes: refrescar el estado real de la etiqueta.
+      if (pushed.code && STALE_STATE_CODES.has(pushed.code)) {
+        await syncLabelOperationalFromServer(found.id)
+        setTick((t) => t + 1)
       }
-      if (tipo === 'jc' && found.cantidadTotes === null) {
-        updateLabelRecord(found.id, {
-          cantidadTotes: cantidad,
-          jefeCuadrilla: jefeCuadrilla.trim(),
-        })
-      }
-      addMovement(movement)
-      setTick((t) => t + 1)
-      setMsg(
-        `Registrado en servidor: ${TIPO_LABEL[tipo]} — ${cantidad} totes para ${found.id}.`,
-      )
-      setMsgTone('ok')
-    } finally {
-      setRegisterBusy(false)
+      return
     }
+    if (tipo === 'jc' && found.cantidadTotes === null) {
+      updateLabelRecord(found.id, {
+        cantidadTotes: cantidad,
+        jefeCuadrilla: jefeCuadrilla.trim(),
+      })
+    }
+    addMovement(movement)
+    setTick((t) => t + 1)
+    setMsg(
+      `Registrado en servidor: ${TIPO_LABEL[tipo]} — ${cantidad} totes para ${found.id}.`,
+    )
+    setMsgTone('ok')
   }
 
   return (
@@ -299,8 +316,8 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
             llegada al acopio.
           </li>
           <li>
-            <strong>Primera vez (JC):</strong> totes que salen, jefe de cuadrilla y JH (personas en
-            cuadrilla).
+            <strong>Primera vez (JC):</strong> totes que salen, jefe de cuadrilla, precio (CLP) y JH
+            (personas en cuadrilla).
           </li>
           <li>
             <strong>En acopio:</strong> totes que llegaron.
@@ -403,6 +420,25 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
                   No se pudo cargar la lista de maestros; puede escribir el nombre manualmente.
                 </span>
               ) : null}
+            </label>
+          )}
+          {tipo === 'jc' && label?.cantidadTotes === null && (
+            <label className="full-width">
+              Precio (CLP)
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={precioClp === '' ? '' : precioClp}
+                disabled={Boolean(label && flowComplete)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setPrecioClp(v === '' ? '' : Number(v))
+                }}
+                placeholder="$ CLP (entero)"
+                autoComplete="off"
+              />
             </label>
           )}
           {tipo === 'jc' && label?.cantidadTotes === null && (

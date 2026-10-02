@@ -5,14 +5,17 @@ import {
   getOperationalPhase,
   updateLabelRecord,
 } from '../lib/storage'
-import { pushMovementToServer } from '../lib/pushMovementToServer'
+import { pushMovementToServer, STALE_STATE_CODES } from '../lib/pushMovementToServer'
 import { fetchJcForemen } from '../lib/masterDataApi'
 export function OperationalJcForm({
   label,
   onSaved,
+  onStale,
 }: {
   label: LabelRecord
   onSaved: () => void
+  /** Otro dispositivo registró antes: recargar el estado real desde el servidor. */
+  onStale: (message: string) => void
 }) {
   const [totes, setTotes] = useState<number>(0)
   const [jefe, setJefe] = useState('')
@@ -66,8 +69,8 @@ export function OperationalJcForm({
       setErr('El estado de la etiqueta cambió. Vuelva a escanear el QR.')
       return
     }
-    if (!Number.isFinite(totes) || totes < 1) {
-      setErr('Indique al menos 1 tote en salida.')
+    if (!Number.isInteger(totes) || totes < 1) {
+      setErr('Indique al menos 1 tote en salida (número entero).')
       return
     }
     const j = jefe.trim()
@@ -75,8 +78,8 @@ export function OperationalJcForm({
       setErr('Ingrese el jefe de cuadrilla.')
       return
     }
-    if (precioClp === '' || !Number.isFinite(precioClp) || precioClp < 0) {
-      setErr('Ingrese un precio válido en CLP.')
+    if (precioClp === '' || !Number.isInteger(precioClp) || precioClp < 0) {
+      setErr('Ingrese un precio válido en CLP (número entero, sin decimales).')
       return
     }
     if (jh === '' || !Number.isFinite(jh) || jh < 0 || !Number.isInteger(jh)) {
@@ -91,7 +94,7 @@ export function OperationalJcForm({
         type: 'jc',
         cantidad: totes,
         at,
-        precioClp: Math.floor(precioClp),
+        precioClp,
         jh,
       }
       const jcFirstRead = label.cantidadTotes === null ? { jefeCuadrilla: j } : undefined
@@ -100,6 +103,10 @@ export function OperationalJcForm({
         jcFirstRead ? { jcFirstRead } : undefined,
       )
       if (pushed.ok === false) {
+        if (pushed.code && STALE_STATE_CODES.has(pushed.code)) {
+          onStale(pushed.error)
+          return
+        }
         setErr(pushed.error)
         return
       }

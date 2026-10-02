@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { getLabelLookupUrlTemplate } from '../lib/labelApiUrl'
 import { syncLabelOperationalFromServer } from '../lib/syncLabelOperationalFromServer'
 import { getLabelById, getOperationalPhase } from '../lib/storage'
@@ -21,6 +21,8 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   const bump = useCallback(() => setRev((r) => r + 1), [])
   /** Tras JC: mostrar cierre sin encadenar al formulario de acopio (otro escaneo aparte). */
   const [jcAckLabelId, setJcAckLabelId] = useState<string | null>(null)
+  /** Aviso cuando otro dispositivo registró antes: se muestra sobre el estado real recargado. */
+  const [staleNotice, setStaleNotice] = useState<string | null>(null)
   const [remoteState, setRemoteState] = useState<{
     labelId: string
     status: 'idle' | 'done_ok' | 'done_miss' | 'done_err'
@@ -37,8 +39,8 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   let remote: RemoteGate = 'off'
   if (lookupTpl) {
     const st = remoteState.labelId === id ? remoteState.status : 'idle'
-    if (st === 'idle' && !label) remote = 'fetching'
-    else if (st === 'idle' && label) remote = 'done_ok'
+    // Siempre se confirma con el servidor antes de mostrar un formulario: otro celular pudo registrar antes.
+    if (st === 'idle') remote = 'fetching'
     else if (st === 'done_ok') remote = 'done_ok'
     else if (st === 'done_miss') remote = 'done_miss'
     else if (st === 'done_err') remote = 'done_err'
@@ -60,6 +62,9 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
         return
       }
       if (after) {
+        setStaleNotice(
+          'No se pudo verificar con el servidor: el estado mostrado puede no estar actualizado. Si al guardar aparece un error, vuelva a escanear el QR.',
+        )
         setRemoteState({ labelId: id, status: 'done_ok' })
         setRev((x) => x + 1)
         return
@@ -70,6 +75,23 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
       cancelled = true
     }
   }, [id, lookupTpl])
+
+  const handleStale = (message: string) => {
+    setStaleNotice(message)
+    void syncLabelOperationalFromServer(id).then(() => bump())
+  }
+
+  const withNotice = (view: ReactNode) =>
+    staleNotice ? (
+      <>
+        <p className="operational-feedback operational-feedback--err operational-stale-notice" role="alert">
+          {staleNotice}
+        </p>
+        {view}
+      </>
+    ) : (
+      view
+    )
 
   if (remote === 'fetching') {
     return <OperationalLoading message="Sincronizando con el servidor…" />
@@ -86,7 +108,7 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   }
 
   if (phase === 'complete') {
-    return <OperationalCompleteView labelId={id} />
+    return withNotice(<OperationalCompleteView labelId={id} />)
   }
 
   if (jcAckLabelId === id) {
@@ -94,20 +116,33 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
   }
 
   if (phase === 'jc') {
-    return (
+    return withNotice(
       <OperationalJcForm
         key={`jc-${rev}`}
         label={label}
         onSaved={() => {
+          setStaleNotice(null)
           bump()
           setJcAckLabelId(id)
         }}
-      />
+        onStale={handleStale}
+      />,
     )
   }
 
+
   if (phase === 'acopio') {
-    return <OperationalAcopioForm key={`ac-${rev}`} label={label} onSaved={bump} />
+    return withNotice(
+      <OperationalAcopioForm
+        key={`ac-${rev}`}
+        label={label}
+        onSaved={() => {
+          setStaleNotice(null)
+          bump()
+        }}
+        onStale={handleStale}
+      />,
+    )
   }
 
   return <OperationalCompleteView labelId={id} />

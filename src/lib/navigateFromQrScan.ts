@@ -53,7 +53,8 @@ export function navigateFromScannedQrPayload(text: string): void {
         goE(e)
         return
       }
-      window.location.assign(t)
+      // Solo se sigue un enlace sin ?e= si es de esta misma app: un QR ajeno pegado sobre la etiqueta no redirige a otro sitio.
+      if (u.origin === origin) window.location.assign(t)
       return
     }
   } catch {

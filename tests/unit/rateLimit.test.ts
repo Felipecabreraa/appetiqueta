@@ -4,18 +4,32 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const { createRateLimiter } = require('../../server/rateLimit.cjs') as {
-  createRateLimiter: (o: { windowMs: number; max: number; now?: () => number }) => (
-    req: { ip?: string },
-    res: { status: (n: number) => { json: (b: unknown) => void }; set: (k: string, v: string) => void },
-    next: () => void,
-  ) => void
+  createRateLimiter: (o: {
+    windowMs: number
+    max: number
+    now?: () => number
+    countIf?: (res: { statusCode: number }) => boolean
+  }) => (req: { ip?: string }, res: FakeRes, next: () => void) => void
 }
 
-function fakeRes() {
+type FakeRes = {
+  statusCode: number
+  status: (n: number) => { json: (b: unknown) => void }
+  set: (k: string, v: string) => void
+  on: (ev: string, cb: () => void) => void
+}
+
+function fakeRes(statusCode = 200) {
   const r = { code: 200, body: undefined as unknown, headers: {} as Record<string, string> }
+  const listeners: Array<() => void> = []
   return {
     r,
+    finish: () => listeners.forEach((cb) => cb()),
     res: {
+      statusCode,
+      on(ev: string, cb: () => void) {
+        if (ev === 'finish') listeners.push(cb)
+      },
       status(n: number) {
         r.code = n
         return { json: (b: unknown) => void (r.body = b) }
@@ -46,6 +60,28 @@ describe('rate limiter', () => {
     t = 60_001
     mw({ ip: '1.1.1.1' }, fakeRes().res, () => passed++)
     expect(passed).toBe(5)
+  })
+
+  it('CA-02: con countIf solo cuentan los intentos fallidos (login)', () => {
+    const mw = createRateLimiter({ windowMs: 60_000, max: 2, countIf: (res) => res.statusCode === 401 })
+    let passed = 0
+    // 20 logins exitosos desde la misma IP (inicio de turno) no bloquean
+    for (let i = 0; i < 20; i++) {
+      const f = fakeRes(200)
+      mw({ ip: '3.3.3.3' }, f.res, () => passed++)
+      f.finish()
+    }
+    expect(passed).toBe(20)
+    // 2 fallidos se permiten; el tercer intento se bloquea
+    for (let i = 0; i < 2; i++) {
+      const f = fakeRes(401)
+      mw({ ip: '3.3.3.3' }, f.res, () => passed++)
+      f.finish()
+    }
+    const blocked = fakeRes(200)
+    mw({ ip: '3.3.3.3' }, blocked.res, () => passed++)
+    expect(passed).toBe(22)
+    expect(blocked.r.code).toBe(429)
   })
 
   it('max <= 0 desactiva el límite', () => {
@@ -110,10 +146,10 @@ describe('servidor real: límites, proxy y CORS', () => {
     expect((await post('/api/movements', '10.0.0.2')).status).not.toBe(429)
   })
 
-  it('CA-02: login limitado', async () => {
+  it('CA-02: login limitado (sin BD responde 503, que no cuenta como fallo de credenciales)', async () => {
     const codes = []
     for (let i = 0; i < 3; i++) codes.push((await post('/api/auth/login', '10.0.1.1')).status)
-    expect(codes[2]).toBe(429)
+    expect(codes).not.toContain(429)
   })
 
   it('CA-03: consulta de etiqueta limitada', async () => {

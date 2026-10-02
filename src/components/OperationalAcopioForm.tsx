@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LabelRecord, Movement } from '../types'
 import { addMovement, firstJcForLabel, getOperationalPhase } from '../lib/storage'
-import { pushMovementToServer } from '../lib/pushMovementToServer'
+import { pushMovementToServer, STALE_STATE_CODES } from '../lib/pushMovementToServer'
 export function OperationalAcopioForm({
   label,
   onSaved,
+  onStale,
 }: {
   label: LabelRecord
   onSaved: () => void
+  /** Otro dispositivo registró antes: recargar el estado real desde el servidor. */
+  onStale: (message: string) => void
 }) {
   const firstJc = useMemo(() => firstJcForLabel(label), [label])
 
@@ -32,8 +35,8 @@ export function OperationalAcopioForm({
       setErr('No hay registro de salida JC. Escanee de nuevo o contacte a administración.')
       return
     }
-    if (llegada === '' || !Number.isFinite(llegada) || llegada < 0) {
-      setErr('Indique una cantidad válida de totes recibidos.')
+    if (llegada === '' || !Number.isInteger(llegada) || llegada < 0) {
+      setErr('Indique una cantidad válida de totes recibidos (número entero).')
       return
     }
     setBusy(true)
@@ -47,6 +50,10 @@ export function OperationalAcopioForm({
       }
       const pushed = await pushMovementToServer(movement)
       if (!pushed.ok) {
+        if (pushed.code && STALE_STATE_CODES.has(pushed.code)) {
+          onStale(pushed.error)
+          return
+        }
         setErr(pushed.error)
         return
       }

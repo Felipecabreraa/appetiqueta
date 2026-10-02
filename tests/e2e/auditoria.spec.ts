@@ -23,7 +23,7 @@ test('CA-04 seguridad: cada lectura guarda IP y navegador de origen', async ({ r
 
   const mov = await request.post(`${API()}/api/movements`, {
     headers: { 'user-agent': 'E2E-Auditoria/1.0' },
-    data: { labelId: id, type: 'jc', cantidad: 5, at: new Date().toISOString(), jcFirstRead: { jefeCuadrilla: 'Juan Pérez' } },
+    data: { labelId: id, type: 'jc', cantidad: 5, precioClp: 1000, jh: 4, at: new Date().toISOString(), jcFirstRead: { jefeCuadrilla: 'Juan Pérez' } },
   })
   expect((await mov.json()).ok).toBe(true)
 
