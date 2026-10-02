@@ -34,3 +34,4 @@ test-results
 .env.staging
 .env.production
 .claude/worktrees
+backups
