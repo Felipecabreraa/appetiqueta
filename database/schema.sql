@@ -67,9 +67,15 @@ CREATE TABLE IF NOT EXISTS seasons (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_seasons_code (code),
-  KEY idx_seasons_current (is_current, is_active)
+  KEY idx_seasons_current (is_current, is_active),
+  KEY idx_seasons_created_by (created_by),
+  KEY idx_seasons_updated_by (updated_by),
+  CONSTRAINT fk_seasons_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_seasons_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
@@ -82,9 +88,15 @@ CREATE TABLE IF NOT EXISTS companies (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_companies_code (code),
-  UNIQUE KEY uq_companies_name (name)
+  UNIQUE KEY uq_companies_name (name),
+  KEY idx_companies_created_by (created_by),
+  KEY idx_companies_updated_by (updated_by),
+  CONSTRAINT fk_companies_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_companies_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS species (
@@ -94,9 +106,15 @@ CREATE TABLE IF NOT EXISTS species (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_species_code (code),
-  UNIQUE KEY uq_species_name (name)
+  UNIQUE KEY uq_species_name (name),
+  KEY idx_species_created_by (created_by),
+  KEY idx_species_updated_by (updated_by),
+  CONSTRAINT fk_species_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_species_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS varieties (
@@ -107,13 +125,19 @@ CREATE TABLE IF NOT EXISTS varieties (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_varieties_code (code),
   UNIQUE KEY uq_varieties_name_species (name, species_id),
   KEY idx_varieties_species (species_id),
   CONSTRAINT fk_varieties_species
     FOREIGN KEY (species_id) REFERENCES species (id)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  KEY idx_varieties_created_by (created_by),
+  KEY idx_varieties_updated_by (updated_by),
+  CONSTRAINT fk_varieties_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_varieties_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS csg_catalog (
@@ -123,9 +147,15 @@ CREATE TABLE IF NOT EXISTS csg_catalog (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_csg_code (code),
-  UNIQUE KEY uq_csg_name (name)
+  UNIQUE KEY uq_csg_name (name),
+  KEY idx_csg_created_by (created_by),
+  KEY idx_csg_updated_by (updated_by),
+  CONSTRAINT fk_csg_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_csg_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS jc_foremen (
@@ -135,9 +165,15 @@ CREATE TABLE IF NOT EXISTS jc_foremen (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_jc_foremen_code (code),
-  UNIQUE KEY uq_jc_foremen_name (name)
+  UNIQUE KEY uq_jc_foremen_name (name),
+  KEY idx_jc_foremen_created_by (created_by),
+  KEY idx_jc_foremen_updated_by (updated_by),
+  CONSTRAINT fk_jc_foremen_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_jc_foremen_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Relación maestra por temporada:
@@ -155,6 +191,8 @@ CREATE TABLE IF NOT EXISTS season_cost_centers (
   source VARCHAR(40) NOT NULL DEFAULT 'excel',
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  created_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: usuario que creó el registro a mano (NULL = histórico o importación Excel)',
+  updated_by BIGINT UNSIGNED NULL COMMENT 'Auditoría: último usuario que lo modificó a mano (NULL = histórico o importación Excel)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_season_company_center (season_id, company_id, center_code),
   KEY idx_scc_company (company_id),
@@ -176,7 +214,11 @@ CREATE TABLE IF NOT EXISTS season_cost_centers (
     ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_scc_csg
     FOREIGN KEY (csg_id) REFERENCES csg_catalog (id)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  KEY idx_scc_created_by (created_by),
+  KEY idx_scc_updated_by (updated_by),
+  CONSTRAINT fk_scc_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_scc_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS master_import_runs (
