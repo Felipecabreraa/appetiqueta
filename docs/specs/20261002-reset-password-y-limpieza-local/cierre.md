@@ -16,3 +16,6 @@
 | CA-05 limpieza automática tras el script | limpieza-local.spec.ts (ejecuta el script real sobre la BD de pruebas) | ✅ |
 | CA-06 sin cambio de época se conserva | limpieza-local.spec.ts | ✅ |
 | Regresión | verify (38 unit) · build · Playwright 52/52 · E2E API 43/43 | ✅ |
+
+## Aprobación para producción
+- **Fecha:** 2026-10-02 · **Usuario:** respuesta textual "apruebo publicar" para este cambio, tras revisar staging.
