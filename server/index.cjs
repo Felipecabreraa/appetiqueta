@@ -9,7 +9,6 @@ const cors = require('cors')
 const mysql = require('mysql2/promise')
 const { checkEnvironment } = require('./envGuard.cjs')
 const {
-  ensureMastersAuditSchema,
   buildAuditedUpdate,
   buildAuditedInsert,
   buildImportAuditClause,
@@ -19,6 +18,8 @@ const {
   mapAuditRow,
   normalizeSeasonDate,
 } = require('./masterAudit.cjs')
+const { bootstrapSchema } = require('./schemaBootstrap.cjs')
+const { buildLabelSchemaState, createSchemaMonitor, primeSchema } = require('./schemaState.cjs')
 const { createRateLimiter, limitFromEnv, clientIpOf } = require('./rateLimit.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
@@ -123,131 +124,6 @@ async function createPool() {
       // Ignorado: el pool puede no estar completamente inicializado.
     }
     return null
-  }
-}
-
-/**
- * Bases existentes pueden tener `movements` sin columnas nuevas del esquema actual.
- * Alinea columnas usadas por POST /api/movements y GET tracking-export.
- */
-async function ensureMovementsSchema(pool) {
-  try {
-    const [rows] = await pool.execute(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements'`,
-    )
-    if (!Array.isArray(rows) || rows.length === 0) return
-    const set = new Set(rows.map((r) => r.COLUMN_NAME))
-    if (!set.has('registered_by')) {
-      await pool.execute(
-        `ALTER TABLE movements ADD COLUMN registered_by VARCHAR(120) NOT NULL DEFAULT ''`,
-      )
-      set.add('registered_by')
-    }
-    if (!set.has('created_by')) {
-      await pool.execute(`ALTER TABLE movements ADD COLUMN created_by BIGINT UNSIGNED NULL`)
-      set.add('created_by')
-    }
-    if (!set.has('precio_clp')) {
-      await pool.execute(`ALTER TABLE movements ADD COLUMN precio_clp INT UNSIGNED NULL`)
-      set.add('precio_clp')
-    }
-    if (!set.has('jh')) {
-      await pool.execute(`ALTER TABLE movements ADD COLUMN jh INT UNSIGNED NULL`)
-      set.add('jh')
-    }
-    if (!set.has('client_ip')) {
-      await pool.execute(`ALTER TABLE movements ADD COLUMN client_ip VARCHAR(45) NULL`)
-      set.add('client_ip')
-    }
-    if (!set.has('user_agent')) {
-      await pool.execute(`ALTER TABLE movements ADD COLUMN user_agent VARCHAR(255) NULL`)
-      set.add('user_agent')
-    }
-    const [idxRows] = await pool.execute(
-      `SELECT 1 AS ok FROM information_schema.STATISTICS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND INDEX_NAME = 'idx_movements_created_by'
-       LIMIT 1`,
-    )
-    if ((!Array.isArray(idxRows) || idxRows.length === 0) && set.has('created_by')) {
-      try {
-        await pool.execute(`ALTER TABLE movements ADD KEY idx_movements_created_by (created_by)`)
-      } catch (err) {
-        if (!(err && typeof err === 'object' && err.code === 'ER_DUP_KEYNAME')) {
-          console.warn('[sync-api] ensureMovementsSchema índice created_by:', err.message || err)
-        }
-      }
-    }
-  } catch (error) {
-    const code = error && typeof error === 'object' ? error.code : ''
-    if (code === 'ER_NO_SUCH_TABLE') return
-    console.warn('[sync-api] ensureMovementsSchema:', error.message || error)
-  }
-}
-
-async function ensureBaseData(pool) {
-  // Época operativa: cambia cuando se vacían los datos operativos (scripts/db-limpiar-operacion.mjs).
-  // Los navegadores la comparan con la suya y, si difiere, borran su historial local de lotes/etiquetas.
-  await pool.execute(
-    `CREATE TABLE IF NOT EXISTS app_meta (
-      meta_key VARCHAR(64) NOT NULL,
-      meta_value VARCHAR(255) NOT NULL,
-      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-      PRIMARY KEY (meta_key)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-  )
-  await pool.execute(
-    `INSERT IGNORE INTO app_meta (meta_key, meta_value) VALUES ('operational_epoch', ?)`,
-    [new Date().toISOString()],
-  )
-
-  await pool.execute(
-    `CREATE TABLE IF NOT EXISTS jc_foremen (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      code VARCHAR(60) NOT NULL,
-      name VARCHAR(180) NOT NULL,
-      is_active TINYINT(1) NOT NULL DEFAULT 1,
-      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-      PRIMARY KEY (id),
-      UNIQUE KEY uq_jc_foremen_code (code),
-      UNIQUE KEY uq_jc_foremen_name (name)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-  )
-
-  await pool.execute(
-    `INSERT INTO roles (code, name, description)
-     VALUES
-       ('superadmin', 'SuperAdmin', 'Control total del sistema'),
-       ('admin', 'Admin', 'Gestión operativa y administrativa'),
-       ('operador', 'Operador', 'Captura operativa restringida')
-     ON DUPLICATE KEY UPDATE
-       name = VALUES(name),
-       description = VALUES(description)`,
-  )
-
-  const username = (process.env.SUPERADMIN_USERNAME || 'superadmin').trim()
-  const password = (process.env.SUPERADMIN_PASSWORD || '').trim()
-  const fullName = (process.env.SUPERADMIN_NAME || 'Super Administrador').trim()
-
-  const [roleRows] = await pool.execute('SELECT id FROM roles WHERE code = ? LIMIT 1', [ROLE.SUPERADMIN])
-  const roleId = roleRows[0]?.id
-  if (!roleId) return
-
-  const [userRows] = await pool.execute('SELECT id FROM users WHERE username = ? LIMIT 1', [username])
-  if (userRows.length === 0 && !password) {
-    console.warn(
-      `[sync-api] SUPERADMIN_PASSWORD no definido: no se crea el usuario ${username} (no se usa una clave por defecto).`,
-    )
-    return
-  }
-  if (userRows.length === 0) {
-    await pool.execute(
-      `INSERT INTO users (username, full_name, password_hash, role_id, is_active)
-       VALUES (?, ?, ?, ?, 1)`,
-      [username, fullName, createPasswordHash(password), roleId],
-    )
-    console.log(`[sync-api] Usuario SuperAdmin inicial creado: ${username}`)
   }
 }
 
@@ -664,26 +540,6 @@ async function fetchMastersBundle(pool, audit) {
   }
 }
 
-function buildLabelSchemaState(existingColumns) {
-  const set = new Set(existingColumns)
-  return {
-    seasonId: set.has('season_id'),
-    companyId: set.has('company_id'),
-    seasonCostCenterId: set.has('season_cost_center_id'),
-  }
-}
-
-async function detectLabelSchema(pool) {
-  const [rows] = await pool.execute(
-    `SELECT COLUMN_NAME
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'labels'`,
-  )
-  const columns = rows.map((row) => String(row.COLUMN_NAME || '').toLowerCase())
-  return buildLabelSchemaState(columns)
-}
-
 function getLabelInsertSql(labelSchema) {
   const optionalColumns = []
   if (labelSchema.seasonId) optionalColumns.push('season_id')
@@ -745,30 +601,19 @@ async function main() {
   }
   if (envCheck.warning) console.warn(`[guardian] ${envCheck.warning}`)
 
-  let pool = await createPool()
-  let labelSchema = buildLabelSchemaState([])
-  let mastersAuditReady = false
-  if (pool) {
-    try {
-      await ensureBaseData(pool)
-      await ensureMovementsSchema(pool)
-      mastersAuditReady = await ensureMastersAuditSchema(pool)
-      labelSchema = await detectLabelSchema(pool)
-    } catch (error) {
-      console.error('[sync-api] Error inicializando datos base en MySQL:', error)
-      try {
-        await pool.end()
-      } catch {
-        // Ignorado: el servidor seguirá en modo sin DB.
-      }
-      pool = null
-    }
-  }
-  const dbReady = Boolean(pool)
+  const pool = await createPool()
   const app = express()
   app.locals.pool = pool
-  app.locals.labelSchema = labelSchema
-  app.locals.mastersAuditReady = mastersAuditReady
+  app.locals.labelSchema = buildLabelSchemaState([])
+  app.locals.mastersAuditReady = false
+  // Estado del esquema (solo lectura). Las rutas lo avisan ante ER_NO_SUCH_TABLE / ER_BAD_FIELD_ERROR.
+  const monitor = createSchemaMonitor({ pool, locals: app.locals, log: (line) => console.log(line) })
+  if (pool) {
+    // bootstrapSchema nunca lanza: un error de esquema no anula el pool (el servicio sigue y health informa).
+    const boot = await bootstrapSchema(pool, { log: (line) => console.log(line), createPasswordHash })
+    await primeSchema({ monitor, locals: app.locals, mastersAuditReady: boot.mastersAuditReady })
+  }
+  const dbReady = Boolean(pool)
 
   // Render antepone un proxy: con TRUST_PROXY=1 req.ip es la IP real del cliente.
   app.set('trust proxy', limitFromEnv('TRUST_PROXY', 1))
@@ -801,6 +646,7 @@ async function main() {
         operationalEpoch = null
       }
     }
+    const schema = await monitor.refresh({ maxAgeMs: 2_000 })
     res.json({
       operationalEpoch,
       ok: true,
@@ -809,6 +655,11 @@ async function main() {
       dbReady,
       // Permite verificar en Render que la IP real del cliente se detecta tras el proxy (límites por IP).
       clientIp: clientIpOf(_req),
+      // null = desconocido (sin pool o detección fallida).
+      schemaComplete: schema.schemaComplete,
+      missingTables: schema.missingTables,
+      mastersAuditReady: schema.mastersAuditReady,
+      movementsSchemaReady: schema.movementsSchemaReady,
     })
   })
 
@@ -853,6 +704,7 @@ async function main() {
         },
       })
     } catch (error) {
+      await monitor.onRouteError(error, 'POST /api/auth/login')
       console.error('[sync-api] POST /api/auth/login', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -864,6 +716,7 @@ async function main() {
       await pool.execute('DELETE FROM auth_sessions WHERE id = ?', [req.auth.sessionId])
       return res.json({ ok: true })
     } catch (error) {
+      await monitor.onRouteError(error, 'POST /api/auth/logout')
       console.error('[sync-api] POST /api/auth/logout', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -892,6 +745,7 @@ async function main() {
       )
       return res.json({ ok: true, users: rows })
     } catch (error) {
+      await monitor.onRouteError(error, 'GET /api/admin/users')
       console.error('[sync-api] GET /api/admin/users', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -919,6 +773,7 @@ async function main() {
       )
       return res.json({ ok: true })
     } catch (error) {
+      await monitor.onRouteError(error, 'POST /api/admin/users')
       console.error('[sync-api] POST /api/admin/users', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -951,6 +806,7 @@ async function main() {
       }
       return res.json({ ok: true })
     } catch (error) {
+      await monitor.onRouteError(error, 'POST /api/admin/users/:id/password')
       console.error('[sync-api] POST /api/admin/users/:id/password', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -1007,6 +863,7 @@ async function main() {
         costCenters,
       })
     } catch (error) {
+      await monitor.onRouteError(error, 'GET /api/master-data/catalog')
       console.error('[sync-api] GET /api/master-data/catalog', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -1025,6 +882,7 @@ async function main() {
       )
       return res.json({ ok: true, foremen: rows })
     } catch (error) {
+      await monitor.onRouteError(error, 'GET /api/master-data/jc-foremen')
       console.error('[sync-api] GET /api/master-data/jc-foremen', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
@@ -1110,6 +968,7 @@ async function main() {
         return res.json({ ok: true, seasonId, received: rows.length, applied })
       } catch (error) {
         await conn.rollback()
+        await monitor.onRouteError(error, 'POST /api/master-data/import')
         console.error('[sync-api] POST /api/master-data/import', error)
         return res.status(500).json({ ok: false, error: 'db' })
       } finally {
@@ -1124,12 +983,17 @@ async function main() {
     requireRoles(...ACCESS.MASTER_ADMIN),
     async (req, res) => {
       if (!requireDb(pool, res)) return
-      try {
-        const data = await fetchMastersBundle(pool, req.app.locals.mastersAuditReady)
-        return res.json({ ok: true, ...data })
-      } catch (error) {
-        console.error('[sync-api] GET /api/admin/masters', error)
-        return res.status(500).json({ ok: false, error: 'db' })
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const used = { mastersAuditReady: Boolean(req.app.locals.mastersAuditReady) }
+        try {
+          const data = await fetchMastersBundle(pool, used.mastersAuditReady)
+          return res.json({ ok: true, ...data })
+        } catch (error) {
+          const changed = await monitor.onRouteError(error, 'GET /api/admin/masters', used)
+          if (attempt === 0 && changed) continue
+          console.error('[sync-api] GET /api/admin/masters', error)
+          return res.status(500).json({ ok: false, error: 'db' })
+        }
       }
     },
   )
@@ -1179,6 +1043,7 @@ async function main() {
         return res.json({ ok: true })
       } catch (error) {
         await conn.rollback()
+        await monitor.onRouteError(error, 'POST /api/admin/seasons')
         console.error('[sync-api] POST /api/admin/seasons', error)
         return res.status(500).json({ ok: false, error: 'db' })
       } finally {
@@ -1202,6 +1067,7 @@ async function main() {
         await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'companies', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/companies')
         console.error('[sync-api] POST /api/admin/companies', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1223,6 +1089,7 @@ async function main() {
         await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'species', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/species')
         console.error('[sync-api] POST /api/admin/species', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1244,6 +1111,7 @@ async function main() {
         await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'csg_catalog', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/csg')
         console.error('[sync-api] POST /api/admin/csg', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1265,6 +1133,7 @@ async function main() {
         await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'jc_foremen', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/jc-foremen')
         console.error('[sync-api] POST /api/admin/jc-foremen', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1297,6 +1166,7 @@ async function main() {
         )
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/varieties')
         console.error('[sync-api] POST /api/admin/varieties', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1346,6 +1216,7 @@ async function main() {
         )
         return res.json({ ok: true })
       } catch (error) {
+        await monitor.onRouteError(error, 'POST /api/admin/relations')
         console.error('[sync-api] POST /api/admin/relations', error)
         return res.status(500).json({ ok: false, error: 'db' })
       }
@@ -1360,31 +1231,36 @@ async function main() {
     if (!id || !/^[A-Z0-9_-]{4,64}$/.test(id)) {
       return res.status(400).json({ ok: false, error: 'id_invalido' })
     }
-    try {
-      const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
-      const [rows] = await pool.execute(
-        `SELECT ${labelFields}
-         FROM labels WHERE id = ? LIMIT 1`,
-        [id],
-      )
-      if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' })
-      let movementRows = []
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const used = { labelSchema: app.locals.labelSchema }
       try {
-        const [mRows] = await pool.execute(
-          `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
-           FROM movements WHERE label_id = ? ORDER BY at ASC`,
+        const labelFields = getLabelSelectFields(used.labelSchema || buildLabelSchemaState([]))
+        const [rows] = await pool.execute(
+          `SELECT ${labelFields}
+           FROM labels WHERE id = ? LIMIT 1`,
           [id],
         )
-        movementRows = mRows
-      } catch (mErr) {
-        if (!(mErr && typeof mErr === 'object' && mErr.code === 'ER_NO_SUCH_TABLE')) {
-          throw mErr
+        if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' })
+        let movementRows = []
+        try {
+          const [mRows] = await pool.execute(
+            `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
+             FROM movements WHERE label_id = ? ORDER BY at ASC`,
+            [id],
+          )
+          movementRows = mRows
+        } catch (mErr) {
+          if (!(mErr && typeof mErr === 'object' && mErr.code === 'ER_NO_SUCH_TABLE')) {
+            throw mErr
+          }
         }
+        return res.json({ ok: true, label: rows[0], movements: movementRows })
+      } catch (error) {
+        const changed = await monitor.onRouteError(error, 'GET /api/labels/:id', used)
+        if (attempt === 0 && changed) continue
+        console.error('[sync-api] GET /api/labels/:id', error)
+        return res.status(500).json({ ok: false, error: 'db' })
       }
-      return res.json({ ok: true, label: rows[0], movements: movementRows })
-    } catch (error) {
-      console.error('[sync-api] GET /api/labels/:id', error)
-      return res.status(500).json({ ok: false, error: 'db' })
     }
   })
 
@@ -1420,6 +1296,7 @@ async function main() {
       if (error instanceof Error && error.message === 'invalid_master_relation') {
         return res.status(400).json({ ok: false, error: 'invalid_master_relation' })
       }
+      await monitor.onRouteError(error, 'POST /api/labels/batch')
       console.error('[sync-api] POST /api/labels/batch', error)
       return res.status(500).json({ ok: false, error: 'db' })
     } finally {
@@ -1530,8 +1407,10 @@ async function main() {
         /* ignore */
       }
       if (error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE') {
+        await monitor.onRouteError(error, 'POST /api/movements')
         return res.status(503).json({ ok: false, error: 'movements_table_missing' })
       }
+      await monitor.onRouteError(error, 'POST /api/movements')
       console.error('[sync-api] POST /api/movements', error)
       return res.status(500).json({ ok: false, error: 'db' })
     } finally {
@@ -1545,57 +1424,62 @@ async function main() {
     requireRoles(...ACCESS.TRACKING_EXPORT),
     async (_req, res) => {
       if (!requireDb(pool, res)) return
-      try {
-        const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
-        const [labelRows] = await pool.execute(
-          `SELECT ${labelFields}
-           FROM labels
-           ORDER BY created_at ASC`,
-        )
-        let movementRows = []
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const used = { labelSchema: app.locals.labelSchema }
         try {
-          const [rows] = await pool.execute(
-            `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
-             FROM movements
-             ORDER BY at ASC`,
+          const labelFields = getLabelSelectFields(used.labelSchema || buildLabelSchemaState([]))
+          const [labelRows] = await pool.execute(
+            `SELECT ${labelFields}
+             FROM labels
+             ORDER BY created_at ASC`,
           )
-          movementRows = rows
-        } catch (error) {
-          if (!(error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE')) {
-            throw error
+          let movementRows = []
+          try {
+            const [rows] = await pool.execute(
+              `SELECT label_id, type, cantidad, at, registered_by, precio_clp, jh
+               FROM movements
+               ORDER BY at ASC`,
+            )
+            movementRows = rows
+          } catch (error) {
+            if (!(error && typeof error === 'object' && error.code === 'ER_NO_SUCH_TABLE')) {
+              throw error
+            }
+            movementRows = []
           }
-          movementRows = []
+          const labels = labelRows.map((row) => ({
+            id: row.id,
+            createdAt: row.created_at,
+            fecha: row.fecha || '',
+            exportacion: row.exportacion || '',
+            empresa: row.empresa || '',
+            csg: row.csg || '',
+            especie: row.especie || '',
+            variedad: row.variedad || '',
+            centroCosto: row.centro_costo || '',
+            sector: row.sector || '',
+            cantidadTotes: row.cantidad_totes === null ? null : Number(row.cantidad_totes),
+            jefeCuadrilla: row.jefe_cuadrilla || '',
+            seasonId: row.season_id ? Number(row.season_id) : null,
+            companyId: row.company_id ? Number(row.company_id) : null,
+            seasonCostCenterId: row.season_cost_center_id ? Number(row.season_cost_center_id) : null,
+          }))
+          const movements = movementRows.map((row) => ({
+            labelId: row.label_id,
+            type: row.type,
+            cantidad: Number(row.cantidad),
+            at: row.at,
+            registeredBy: row.registered_by || '',
+            precioClp: row.precio_clp === null ? undefined : Number(row.precio_clp),
+            jh: row.jh === null || row.jh === undefined ? undefined : Number(row.jh),
+          }))
+          return res.json({ ok: true, labels, movements })
+        } catch (error) {
+          const changed = await monitor.onRouteError(error, 'GET /api/reports/tracking-export', used)
+          if (attempt === 0 && changed) continue
+          console.error('[sync-api] GET /api/reports/tracking-export', error)
+          return res.status(500).json({ ok: false, error: 'db' })
         }
-        const labels = labelRows.map((row) => ({
-          id: row.id,
-          createdAt: row.created_at,
-          fecha: row.fecha || '',
-          exportacion: row.exportacion || '',
-          empresa: row.empresa || '',
-          csg: row.csg || '',
-          especie: row.especie || '',
-          variedad: row.variedad || '',
-          centroCosto: row.centro_costo || '',
-          sector: row.sector || '',
-          cantidadTotes: row.cantidad_totes === null ? null : Number(row.cantidad_totes),
-          jefeCuadrilla: row.jefe_cuadrilla || '',
-          seasonId: row.season_id ? Number(row.season_id) : null,
-          companyId: row.company_id ? Number(row.company_id) : null,
-          seasonCostCenterId: row.season_cost_center_id ? Number(row.season_cost_center_id) : null,
-        }))
-        const movements = movementRows.map((row) => ({
-          labelId: row.label_id,
-          type: row.type,
-          cantidad: Number(row.cantidad),
-          at: row.at,
-          registeredBy: row.registered_by || '',
-          precioClp: row.precio_clp === null ? undefined : Number(row.precio_clp),
-          jh: row.jh === null || row.jh === undefined ? undefined : Number(row.jh),
-        }))
-        return res.json({ ok: true, labels, movements })
-      } catch (error) {
-        console.error('[sync-api] GET /api/reports/tracking-export', error)
-        return res.status(500).json({ ok: false, error: 'db' })
       }
     },
   )

@@ -51,6 +51,21 @@ Variables de entorno: `NODE_VERSION=22.12.0`, `APP_ENV=staging` (**obligatoria**
 ### 4. Pruebas locales
 Ya está configurado en este equipo: `.env.test` apunta a la BD local `appetiquetado_test`. Para otro equipo, vea `.env.test.example`.
 
+## Esquema al arrancar y estado en `/api/health`
+Al arrancar, el servidor crea las tablas base que falten (solo `CREATE TABLE IF NOT EXISTS`, tomadas de `database/schema.sql`) y aplica las migraciones aditivas. Nunca borra ni recrea una tabla existente. Si una tabla no se puede crear (por ejemplo, por falta de privilegio CREATE), el error queda en el log con el prefijo `[schema]` y el servicio sigue vivo.
+
+`GET /api/health` responde siempre 200 y suma cuatro campos: `schemaComplete`, `missingTables`, `mastersAuditReady` y `movementsSchemaReady` (`null` = desconocido, por ejemplo sin conexión a la BD). El smoke remoto falla si `dbReady` o `schemaComplete` no son `true` y nombra lo que falta.
+
+Si `schemaComplete=false`: reinicie el servicio (reaplica las tablas y migraciones); si persiste, revise el log `[schema]`. Los cambios de esquema detectados en caliente solo se informan, no se corrigen sin reiniciar.
+
+## Copiar producción a staging
+1. En Render, **suspenda** `appetiqueta-dev` (Suspend) para que no escriba mientras se importa.
+2. En phpMyAdmin, **confirme que la BD seleccionada es `trn_etiquetatest`** (el usuario también ve producción). Luego, dentro de **la misma** pestaña SQL: `SET FOREIGN_KEY_CHECKS=0;`, los `DROP TABLE` de las tablas, y `SET FOREIGN_KEY_CHECKS=1;`. (La casilla "Desactivar la revisión de claves foráneas" es de la pestaña Importar, no de la pestaña SQL.)
+3. Importe el dump de producción (en la pestaña Importar se puede marcar esa casilla). Después, vacíe `auth_sessions` en staging (`DELETE FROM auth_sessions;` en `trn_etiquetatest`): el dump trae sesiones vigentes de producción.
+4. Reanude el servicio. Al arrancar recrea las tablas que falten y reaplica las migraciones aditivas. Ante una restauración parcial, revise el log `[schema]` (una `roles` recreada vacía se rellena en el orden superadmin, admin, operador).
+5. Verifique: `E2E_REMOTE_URL=<url de staging> npm run test:smoke:remote` (debe haber `schemaComplete=true`).
+6. Efecto en `operational_epoch`: toma el valor de producción, así que los navegadores de staging borran su historial local de lotes y etiquetas (`src/lib/operationalEpoch.ts`).
+
 ## Reglas de seguridad
 | Regla | Dónde se aplica |
 |---|---|

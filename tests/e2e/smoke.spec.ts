@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { evaluateHealth } from './helpers/healthCheck'
 
 /** @smoke = solo lectura: corre también contra entornos desplegados (E2E_REMOTE_URL). */
 test('API responde health @smoke', async ({ request }) => {
@@ -6,6 +7,9 @@ test('API responde health @smoke', async ({ request }) => {
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   expect(body).toHaveProperty('env')
+  // CA-09/CA-10: la BD debe estar lista y el esquema completo (solo lectura: únicamente GET).
+  const veredicto = evaluateHealth(body)
+  expect(veredicto.ok, veredicto.ok ? '' : `Health no sano: ${veredicto.motivo}`).toBe(true)
   // CA-06 guardián: al publicar, E2E_EXPECTED_ENV=staging|production confirma que el servicio corre en su ambiente.
   if (process.env.E2E_EXPECTED_ENV) expect(body.env).toBe(process.env.E2E_EXPECTED_ENV)
 })
