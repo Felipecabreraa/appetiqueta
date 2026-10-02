@@ -429,6 +429,78 @@ try {
     }
   })
 
+  // Bordes §6 (QA fase 6): una sola re-detección por ventana y health sin filtraciones en estados degradados.
+  const selects = async (conn) => Number((await conn.query("SHOW GLOBAL STATUS LIKE 'Com_select'"))[0][0].Value)
+  const rafaga = (n, fn) => Promise.all(Array.from({ length: n }, fn))
+
+  await escenario('BORDE: 40 logins concurrentes con ER_NO_SUCH_TABLE → una sola re-detección por ventana', async (conn) => {
+    const op = await crearOperador(conn)
+    const s = await arrancar()
+    try {
+      await conn.query('DROP TABLE auth_sessions')
+      // Línea base: SELECT por login (1) sin re-detección = 40. Sin deduplicar serían ~80 (cada ruta detectaría).
+      const a0 = await selects(conn)
+      const r1 = await rafaga(40, () => login(op.username, op.password))
+      const a1 = await selects(conn)
+      check(r1.every((r) => r.status === 500), `BORDE-ráfaga: se esperaban 40 × 500, fue ${[...new Set(r1.map((r) => r.status))]}`)
+      const extra1 = a1 - a0 - 40
+      check(extra1 <= 3, `BORDE-ráfaga: SELECT extra de re-detección en la 1.ª ráfaga = ${extra1} (máx 3 esperado: una detección)`)
+      const r2 = await rafaga(40, () => login(op.username, op.password))
+      const a2 = await selects(conn)
+      check(r2.every((r) => r.status === 500), 'BORDE-ráfaga: 2.ª ráfaga debe seguir en 500')
+      const extra2 = a2 - a1 - 40
+      check(extra2 <= 1, `BORDE-ráfaga: dentro de la ventana de 10 s no debe re-detectar de nuevo; SELECT extra = ${extra2}`)
+      const cambios = (s.salida().match(/Cambio de esquema detectado/g) || []).length
+      check(cambios <= 1, `BORDE-ráfaga: "Cambio de esquema detectado" aparece ${cambios} veces (máx 1)`)
+      const h = await http('GET', '/api/health')
+      check(h.body.schemaComplete === false && JSON.stringify(h.body.missingTables) === '["auth_sessions"]', `BORDE-ráfaga: health debe listar auth_sessions, fue ${JSON.stringify(h.body)}`)
+    } finally {
+      await s.stop()
+    }
+  })
+
+  await escenario('BORDE: /api/health en ráfaga de 60 → una sola consulta de esquema en vuelo', async (conn) => {
+    const s = await arrancar()
+    try {
+      await dormir(2_500) // deja expirar la caché de 2 s del health
+      const a0 = await selects(conn)
+      const rs = await rafaga(60, () => http('GET', '/api/health'))
+      const a1 = await selects(conn)
+      check(rs.every((r) => r.status === 200 && r.body.schemaComplete === true), 'BORDE-health: las 60 respuestas deben ser 200 con esquema completo')
+      const extra = a1 - a0 - 60 // health hace 1 SELECT propio (época) por request
+      check(extra >= 0 && extra <= 2, `BORDE-health: SELECT extra de detección en la ráfaga de 60 = ${extra} (esperado 0..2: una detección; sin deduplicar serían ~60)`)
+    } finally {
+      await s.stop()
+    }
+  })
+
+  await escenario('BORDE: health no filtra host, usuario, BD ni errores de MySQL en estado degradado (tabla faltante y BD caída)', async (conn) => {
+    const prohibidos = [env.MYSQL_HOST, env.MYSQL_USER, env.MYSQL_DATABASE, env.MYSQL_PASSWORD, 'ER_', 'ECONNREFUSED', 'Access denied', 'stack', ' at ', 'sqlMessage', 'errno']
+    const revisar = (nombre, h) => {
+      const { clientIp: _ip, ...resto } = h.body
+      const t = JSON.stringify(resto)
+      for (const p of prohibidos) if (p) check(!t.includes(p), `BORDE-fuga (${nombre}): health contiene "${p}": ${t}`)
+    }
+    let s = await arrancar()
+    try {
+      await conn.query('DROP TABLE auth_sessions')
+      await login('x', 'y') // fuerza la re-detección por ruta
+      revisar('tabla faltante', await http('GET', '/api/health'))
+    } finally {
+      await s.stop()
+    }
+    s = await arrancar({ MYSQL_PASSWORD: `${env.MYSQL_PASSWORD}_incorrecta` })
+    try {
+      const h = await http('GET', '/api/health')
+      check(h.body.dbReady === false, 'BORDE-fuga: dbReady debe ser false con clave incorrecta')
+      revisar('BD caída', h)
+      const l = await login('x', 'y')
+      check(l.status >= 500 && !JSON.stringify(l.body).match(/ER_|Access denied|ECONNREFUSED/), `BORDE-fuga: el login sin BD no debe filtrar errores de MySQL: ${l.status} ${JSON.stringify(l.body)}`)
+    } finally {
+      await s.stop()
+    }
+  })
+
   exitCode = fallos.length ? 1 : 0
   console.log(fallos.length ? `[esquema-arranque] ${fallos.length} fallo(s).` : '[esquema-arranque] OK.')
 } catch (error) {
