@@ -22,7 +22,7 @@
 ┌─ Importar maestros desde Excel ───────────┐
 │ Carga o actualiza empresas, especies,     │
 │ variedades, CC y CSG de una temporada.    │
-│ ¿No tienes archivo? Descargar plantilla   │
+│ ¿No tiene archivo? Descargar plantilla    │
 │ 1 Temporada: Código · Nombre · Actual     │
 │ 2 Archivo: [Elegir archivo]               │
 │   Columnas esperadas: …                   │

@@ -3900,10 +3900,6 @@ html.scroll-lock .modal-root {
   margin-top: 0.5rem;
 }
 
-.master-excel .master-export-info:empty {
-  display: none;
-}
-
 .master-excel .master-template {
   margin: 0 0 0.9rem;
   font-size: 0.9rem;

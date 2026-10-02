@@ -187,3 +187,20 @@ test('CA-04: sin desborde horizontal en móvil dentro de #panel-maestros-excel',
   }))
   expect(scrollWidth, 'sin scroll horizontal de la página').toBeLessThanOrEqual(clientWidth)
 })
+
+test('CA-03: la región role="status" de exportar existe y no está oculta aunque esté vacía (lectores de pantalla)', async ({ page, request }) => {
+  // Se demora la carga de temporadas: mientras tanto la región está vacía y debe seguir en el árbol de
+  // accesibilidad, para que un error posterior se anuncie.
+  let liberar: () => void = () => {}
+  const espera = new Promise<void>((r) => (liberar = r))
+  await page.route('**/api/admin/masters', async (route) => {
+    await espera
+    await route.continue()
+  })
+  await loginAdmin(page, request)
+  await page.goto('/#maestros/excel')
+  const estado = seccionExportar(page).getByRole('status')
+  await expect(estado).toHaveCount(1)
+  expect(await estado.evaluate((el) => getComputedStyle(el).display)).not.toBe('none')
+  liberar()
+})
