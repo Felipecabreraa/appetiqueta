@@ -77,6 +77,14 @@ describe('login()', () => {
     expect(await login('a', 'b')).toEqual({ ok: false, message: TNET })
   })
 
+  it('CA-11: si guardar la sesión falla tras un 200 válido (storage bloqueado) -> "No fue posible iniciar sesión." y no "Sin conexión"', async () => {
+    mockFetch(200, { ok: true, token: 'tok', user: { id: 1, username: 'op', fullName: 'Op', role: 'operador' } })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('cuota', 'QuotaExceededError')
+    })
+    expect(await login('a', 'b')).toEqual({ ok: false, message: T4XX })
+  })
+
   it('CA-14: 429 -> texto de demasiados intentos', async () => {
     mockFetch(429, { ok: false, error: 'rate_limited' })
     expect(await login('a', 'b')).toEqual({ ok: false, message: T429 })
