@@ -2,6 +2,7 @@ import type { Movement } from '../types'
 import { buildLabelLookupUrl, normalizeRemoteLabelPayload } from './fetchLabelRemote'
 import { getLabelLookupUrlTemplate } from './labelApiUrl'
 import { getSessionToken } from './session'
+import { FIELD_TIMEOUT_MS, timeoutSignal } from './timeout'
 import { replaceMovementsForLabel, upsertLabel } from './storage'
 import { normalizeMovementRow } from './trackingExportApi'
 
@@ -29,7 +30,7 @@ export async function syncLabelOperationalFromServer(
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   try {
-    const res = await fetch(url, { method: 'GET', headers })
+    const res = await fetch(url, { method: 'GET', headers, signal: timeoutSignal(FIELD_TIMEOUT_MS) })
     if (res.status === 404) {
       return { ok: false, error: 'not_found' }
     }

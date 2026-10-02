@@ -387,3 +387,8 @@
     transform: rotate(360deg);
   }
 }
+
+/* Aviso cuando otro dispositivo registró la lectura antes que este teléfono. */
+.operational-stale-notice {
+  margin: 12px 16px 0;
+}

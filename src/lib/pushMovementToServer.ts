@@ -1,19 +1,25 @@
 import type { Movement } from '../types'
 import { apiFetch } from './apiClient'
+import { FIELD_TIMEOUT_MS, timeoutSignal } from './timeout'
 
 export type PushMovementOptions = {
   /** Obligatorio en el servidor cuando el JC es el primero para esa etiqueta (cantidad_totes aún NULL en BD). */
   jcFirstRead?: { jefeCuadrilla: string }
 }
 
-export type PushMovementResult = { ok: true } | { ok: false; error: string }
+export type PushMovementResult = { ok: true } | { ok: false; error: string; code?: string }
+
+/** Rechazos que indican que el estado mostrado en este teléfono quedó desactualizado (otro dispositivo registró antes). */
+export const STALE_STATE_CODES = new Set(['jc_already_registered', 'already_complete', 'jc_required', 'acopio_required'])
 
 function mapMovementError(code: string, http: number): string {
   switch (code) {
     case 'invalid_movement':
-      return 'Datos de movimiento inválidos.'
+      return 'Datos inválidos: use números enteros (totes entre 1 y 100.000 en JC; precio y JH sin decimales).'
     case 'label_not_found':
       return 'La etiqueta no existe en el servidor. Debe cargarse desde oficina antes de registrar lecturas.'
+    case 'jc_data_required':
+      return 'En el primer JC debe indicar precio (CLP) y JH.'
     case 'jc_first_read_required':
       return 'En el primer JC debe indicar el jefe de cuadrilla para guardar en el servidor.'
     case 'jc_required':
@@ -53,6 +59,7 @@ export async function pushMovementToServer(
     const res = await apiFetch('/api/movements', {
       method: 'POST',
       body: JSON.stringify(body),
+      signal: timeoutSignal(FIELD_TIMEOUT_MS),
     })
     if (res.ok) {
       return { ok: true }
@@ -64,12 +71,14 @@ export async function pushMovementToServer(
         : ''
     const message = mapMovementError(code, res.status)
     console.error(`[sync] movement push rejected: ${code || res.status}`)
-    return { ok: false, error: message }
+    return { ok: false, error: message, code }
   } catch (error) {
     console.error('[sync] movement push failed', error)
     return {
       ok: false,
-      error: error instanceof Error ? error.message : 'No se pudo conectar con el servidor.',
+      error:
+        'No se pudo confirmar con el servidor (sin señal o sin respuesta). Vuelva a escanear el QR: si la lectura quedó guardada verá el paso siguiente; si no, regístrela de nuevo.',
+      code: 'network',
     }
   }
 }

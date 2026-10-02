@@ -14,15 +14,15 @@ El riesgo real es el abuso masivo, o alguien con acceso a una etiqueta física. 
 ## Criterios de aceptación
 ```gherkin
 # CA-01 — límite por IP en lecturas
-Dado un cliente que supera RATE_LIMIT_MOVEMENTS_PER_MIN (por defecto 120) POST /api/movements en un minuto
+Dado un cliente que supera RATE_LIMIT_MOVEMENTS_PER_MIN (por defecto 600) POST /api/movements en un minuto
 Entonces recibe 429 { ok:false, error:"rate_limited" } con cabecera Retry-After
 
 # CA-02 — límite por IP en login
-Dado un cliente que supera RATE_LIMIT_LOGIN_PER_MIN (por defecto 10) intentos de login en un minuto
+Dado un cliente que supera RATE_LIMIT_LOGIN_PER_MIN (por defecto 10) intentos de login FALLIDOS en un minuto
 Entonces recibe 429 rate_limited
 
 # CA-03 — límite en consultas de etiqueta
-GET /api/labels/:id limitado por RATE_LIMIT_LABELS_PER_MIN (por defecto 300)
+GET /api/labels/:id limitado por RATE_LIMIT_LABELS_PER_MIN (por defecto 1200)
 
 # CA-04 — trazabilidad
 Cada movimiento guarda client_ip y user_agent (migración idempotente + schema.sql)
