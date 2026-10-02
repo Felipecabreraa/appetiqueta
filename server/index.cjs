@@ -175,6 +175,21 @@ async function ensureMovementsSchema(pool) {
 }
 
 async function ensureBaseData(pool) {
+  // Época operativa: cambia cuando se vacían los datos operativos (scripts/db-limpiar-operacion.mjs).
+  // Los navegadores la comparan con la suya y, si difiere, borran su historial local de lotes/etiquetas.
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS app_meta (
+      meta_key VARCHAR(64) NOT NULL,
+      meta_value VARCHAR(255) NOT NULL,
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (meta_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  )
+  await pool.execute(
+    `INSERT IGNORE INTO app_meta (meta_key, meta_value) VALUES ('operational_epoch', ?)`,
+    [new Date().toISOString()],
+  )
+
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS jc_foremen (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -342,6 +357,7 @@ function normalizeLabelInput(item) {
   }
 }
 
+const MIN_PASSWORD_LENGTH = 8
 const MAX_TOTES = 100_000
 const MAX_PRECIO_CLP = 100_000_000
 const MAX_JH = 10_000
@@ -708,8 +724,18 @@ async function main() {
   })
   app.use(express.json({ limit: '8mb' }))
 
-  app.get('/api/health', (_req, res) => {
+  app.get('/api/health', async (_req, res) => {
+    let operationalEpoch = null
+    if (pool) {
+      try {
+        const [rows] = await pool.execute(`SELECT meta_value FROM app_meta WHERE meta_key = 'operational_epoch'`)
+        operationalEpoch = rows[0]?.meta_value ?? null
+      } catch {
+        operationalEpoch = null
+      }
+    }
     res.json({
+      operationalEpoch,
       ok: true,
       service: 'appetiquetado-sync',
       env: envCheck.env,
@@ -827,6 +853,38 @@ async function main() {
       return res.json({ ok: true })
     } catch (error) {
       console.error('[sync-api] POST /api/admin/users', error)
+      return res.status(500).json({ ok: false, error: 'db' })
+    }
+  })
+
+  app.post('/api/admin/users/:id/password', authMiddleware, requireRoles(ROLE.SUPERADMIN), async (req, res) => {
+    if (!requireDb(pool, res)) return
+    const userId = Number(req.params.id)
+    const password = String(req.body?.password || '')
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ ok: false, error: 'invalid_user' })
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ ok: false, error: 'password_too_short' })
+    }
+    if (password.length > 200) {
+      return res.status(400).json({ ok: false, error: 'password_too_long' })
+    }
+    try {
+      const [result] = await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [
+        createPasswordHash(password),
+        userId,
+      ])
+      if (!result.affectedRows) return res.status(404).json({ ok: false, error: 'user_not_found' })
+      // Cierra las sesiones abiertas del usuario; si es la propia, conserva la sesión actual.
+      if (userId === Number(req.auth.userId)) {
+        await pool.execute('DELETE FROM auth_sessions WHERE user_id = ? AND id <> ?', [userId, req.auth.sessionId])
+      } else {
+        await pool.execute('DELETE FROM auth_sessions WHERE user_id = ?', [userId])
+      }
+      return res.json({ ok: true })
+    } catch (error) {
+      console.error('[sync-api] POST /api/admin/users/:id/password', error)
       return res.status(500).json({ ok: false, error: 'db' })
     }
   })

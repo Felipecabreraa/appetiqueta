@@ -1,6 +1,7 @@
 /**
  * Vacía los datos OPERATIVOS de una BD (etiquetas, lecturas JC/acopio y lotes) y conserva los maestros,
  * usuarios y roles. Antes de borrar guarda un respaldo completo de esas tablas en backups/.
+ * Renueva la "época operativa" (app_meta) para que cada navegador borre su historial local al abrir la app.
  *
  * Uso (lo ejecuta una persona, nunca un agente):
  *   node scripts/db-limpiar-operacion.mjs --env .env                      → solo muestra conteos (simulación)
@@ -78,11 +79,27 @@ try {
   console.log(`\nRespaldo: ${file} (${guardadas} filas)`)
 
   // 2) Borrado en una sola transacción: o se borra todo, o nada.
+  //    El DDL va antes: en MySQL un CREATE TABLE dentro de la transacción haría commit implícito.
+  await conn.query(
+    `CREATE TABLE IF NOT EXISTS app_meta (
+      meta_key VARCHAR(64) NOT NULL,
+      meta_value VARCHAR(255) NOT NULL,
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (meta_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  )
   await conn.beginTransaction()
   for (const t of TABLAS_OPERATIVAS) {
     const [r] = await conn.query(`DELETE FROM \`${t}\``)
     console.log(`  ${t}: ${r.affectedRows} filas eliminadas`)
   }
+  // Nueva época operativa: cada navegador borrará su historial local de lotes/etiquetas al abrir la app.
+  await conn.query(
+    `INSERT INTO app_meta (meta_key, meta_value) VALUES ('operational_epoch', ?)
+     ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)`,
+    [new Date().toISOString()],
+  )
+  console.log('  época operativa renovada: los navegadores limpiarán su historial local')
   await conn.commit()
 
   const [[m]] = await conn.query(

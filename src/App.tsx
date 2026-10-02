@@ -16,6 +16,7 @@ import { createLabelRecords, MAX_ETIQUETAS_LOTE } from './lib/createLabelRecords
 import { exportLabelsPdf } from './lib/exportLabelsPdf'
 import { pushLabelsBatchToServer } from './lib/pushLabelsBatch'
 import { saveLabelsBatch } from './lib/storage'
+import { syncOperationalEpoch } from './lib/operationalEpoch'
 import { readTrackingFromUrl, type TrackingSeed } from './lib/urlBootstrap'
 import type { AuthUser, CompanyOption, CostCenterOption, LabelRecord, SeasonOption } from './types'
 import { OperationalCaptureApp } from './components/OperationalCaptureApp'
@@ -154,6 +155,16 @@ function App() {
     },
     [role],
   )
+
+  // Si se vaciaron los datos operativos en el servidor, este navegador borra su historial local de lotes.
+  useEffect(() => {
+    if (urlBoot.operational) return
+    void syncOperationalEpoch().then((cleared) => {
+      if (!cleared) return
+      setGeneratedRecords([])
+      setBatchHistoryKey((k) => k + 1)
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
