@@ -49,11 +49,18 @@ function parseBaseTables(sqlText) {
 
 async function ensureBaseTables(pool, { log = console.log, schemaPath = DEFAULT_SCHEMA_PATH } = {}) {
   const result = { created: [], failed: [] }
-  let tables
+  let text
   try {
-    tables = parseBaseTables(fs.readFileSync(schemaPath, 'utf8'))
+    text = fs.readFileSync(schemaPath, 'utf8')
   } catch (err) {
     log(`[schema] ERROR: no se pudo leer database/schema.sql (${err?.message || err})`)
+    return result
+  }
+  let tables
+  try {
+    tables = parseBaseTables(text)
+  } catch (err) {
+    log(`[schema] ERROR: el parser rechazó database/schema.sql, no se crea ninguna tabla (${err?.message || err})`)
     return result
   }
   let existing
