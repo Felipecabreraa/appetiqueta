@@ -49,3 +49,7 @@
 | I7 El arranque en frío de Free superaba 20 s | Timeout de terreno de 60 s | — |
 | N1 Etiqueta borrada en el servidor pero en caché | Se muestra "no encontrada" (manda el servidor) | revisión |
 | N3/N4/N6 | Mensaje de datos inválidos específico; mensaje de red propio en escritorio; indentación | revisión |
+
+## Aprobación para producción
+- **Fecha:** 2026-10-01 · **Usuario:** respuesta textual "Apruebo publicar" a la pregunta "¿Apruebas publicar en PRODUCCIÓN (etiqueta.trn.cl)?", tras ver el paquete (auditoría APTO, evidencia de pruebas, cambios visibles, migración y rollback).
+- **Alcance:** todo lo acumulado en `developer` hasta este commit (equipo agéntico, CI, ambientes, guardián, seguridad de lecturas, cobertura E2E, lectura QR multiusuario, IP real tras Cloudflare).
