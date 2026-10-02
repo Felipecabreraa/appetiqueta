@@ -12,10 +12,10 @@
 - [x] 2 Diseño — revisor: APROBADO CON CAMBIOS (3 IMP + 5 MEN, resueltos en iteración 2, §11). **Compuerta 2 aprobada por el usuario el 2026-10-02 ("Sí, aprobado").**
   - Decisiones del Lead (2026-10-02) sobre §10 del diseño: (1) 6 columnas (con NOMBRE CC) en plantilla, exportación y No importables; corregir CA-01/CA-06. (2) Celda NOMBRE CC vacía conserva el nombre. (3) Temporadas inactivas en el selector con " (inactiva)" + aviso. (4) CA-18 usa el proyecto `movil` (Pixel 7). (5) Renombrado por colisión de código → hallazgo fuera de alcance.
 - [x] 3 Pruebas primero — unit en rojo (2dbb96b); E2E UI/API 27 rojos + 2 invariantes verdes por proyecto; runner de volumen CA-19 rojo (500 por P5); regresión 122 ok + 8 skip.
-- [ ] 4 Implementación — en curso (rama actualizada con developer 111a692, que trae esquema-y-errores-login)
-- [ ] 5 Verificación local
-- [ ] 6 E2E completo
-- [ ] 7 Revisión
+- [x] 4 Implementación — backend 909c77e, d275bf8; frontend 93fc1da, e65049b
+- [x] 5 Verificación local — /verificar APTO en serie (2026-10-02): lint/tsc/build ok, unit 328/328, E2E UI 216 ok + 8 skip intencionales, E2E API 43/43 + CA-27 + esquema-arranque + CA-19 OK. Los intermitentes de la fase 4 se debían a la BD compartida entre devs.
+- [ ] 6 E2E completo — en curso
+- [ ] 7 Revisión — en curso
 - [ ] 8 Staging
 - [ ] 9 Producción
 
