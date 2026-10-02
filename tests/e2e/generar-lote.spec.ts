@@ -33,7 +33,7 @@ test('CA-01: superadmin genera un lote de 3 etiquetas con QR y quedan en el serv
   await page.getByRole('button', { name: 'Generar 3 etiquetas (mismo lote)' }).click()
 
   await expect(page.getByText('3 etiquetas con los mismos datos', { exact: false })).toBeVisible()
-  await expect(page.locator('.label-preview-wrap .label-sheet svg').first()).toBeVisible()
+  await expect(page.getByRole('img', { name: /Código QR de la etiqueta/ }).first()).toBeVisible()
 
   await page.getByText('Códigos del lote (3)').click()
   const items = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Abrir en lecturas' }) })

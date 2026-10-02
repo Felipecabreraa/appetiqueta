@@ -59,7 +59,7 @@ export function LabelSheet({
         </div>
 
         <div className="cell label-qr">
-          <QRCodeSVG value={payload} size={168} level="H" includeMargin={true} />
+          <QRCodeSVG value={payload} size={168} level="H" includeMargin={true} role="img" aria-label={`Código QR de la etiqueta ${record.id}`} />
           <div className="qr-id">{record.id}</div>
         </div>
 

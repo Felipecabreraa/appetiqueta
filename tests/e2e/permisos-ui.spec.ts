@@ -25,8 +25,11 @@ test('CA-05: operador que fuerza la URL de Maestros es redirigido a su módulo p
   const u = await crearUsuario(request, 'operador')
   await loginAs(page, u.username, u.password)
   await page.goto('/#maestros/excel')
-  // El aviso "No tiene permisos..." no se afirma: se borra de forma intermitente (carrera en App.tsx, ver cierre.md).
   await expect(page.getByRole('heading', { name: 'Nueva generación' })).toBeVisible()
+  // El aviso debe permanecer aunque llegue la sesión validada del servidor (fix/aviso-permisos).
+  await expect(page.getByText('No tiene permisos para acceder al módulo "Maestros".')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByText('No tiene permisos para acceder al módulo "Maestros".')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Carga maestra desde Excel' })).toHaveCount(0)
 })
 
