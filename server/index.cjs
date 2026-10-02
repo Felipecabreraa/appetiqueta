@@ -8,6 +8,17 @@ const express = require('express')
 const cors = require('cors')
 const mysql = require('mysql2/promise')
 const { checkEnvironment } = require('./envGuard.cjs')
+const {
+  ensureMastersAuditSchema,
+  buildAuditedUpdate,
+  buildAuditedInsert,
+  buildImportAuditClause,
+  buildUnsetCurrentSeason,
+  auditSelect,
+  auditJoins,
+  mapAuditRow,
+  normalizeSeasonDate,
+} = require('./masterAudit.cjs')
 const { createRateLimiter, limitFromEnv, clientIpOf } = require('./rateLimit.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
@@ -25,7 +36,7 @@ const ACCESS = {
   CATALOG: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
   LABEL_BATCH: [ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.OPERADOR],
   TRACKING_EXPORT: [ROLE.SUPERADMIN, ROLE.ADMIN],
-  MASTER_ADMIN: [ROLE.SUPERADMIN],
+  MASTER_ADMIN: [ROLE.SUPERADMIN, ROLE.ADMIN],
 }
 
 function hashToken(token) {
@@ -496,13 +507,23 @@ async function resolveLabelCatalog(conn, payload) {
   }
 }
 
-async function upsertByCodeAndName(conn, table, code, name) {
+const withAuditClause = (clause) => (clause ? `${clause},` : '')
+
+async function upsertByCodeAndName(conn, table, code, name, audit) {
   const safeCode = toCode(code || name)
   const safeName = normalizeMasterName(name || code)
+  const clause = buildImportAuditClause(
+    [
+      { col: 'name', expr: 'VALUES(name)', text: true },
+      { col: 'is_active', expr: '1' },
+    ],
+    { audit },
+  )
   await conn.execute(
     `INSERT INTO ${table} (code, name, is_active)
      VALUES (?, ?, 1)
      ON DUPLICATE KEY UPDATE
+       ${withAuditClause(clause)}
        name = VALUES(name),
        is_active = 1`,
     [safeCode, safeName],
@@ -511,13 +532,22 @@ async function upsertByCodeAndName(conn, table, code, name) {
   return rows[0]?.id
 }
 
-async function resolveVariety(conn, speciesId, varietyName) {
+async function resolveVariety(conn, speciesId, varietyName, audit) {
   const code = toCode(varietyName)
   const name = normalizeMasterName(varietyName)
+  const clause = buildImportAuditClause(
+    [
+      { col: 'name', expr: 'VALUES(name)', text: true },
+      { col: 'species_id', expr: 'VALUES(species_id)' },
+      { col: 'is_active', expr: '1' },
+    ],
+    { audit },
+  )
   await conn.execute(
     `INSERT INTO varieties (code, name, species_id, is_active)
      VALUES (?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
+       ${withAuditClause(clause)}
        name = VALUES(name),
        species_id = VALUES(species_id),
        is_active = 1`,
@@ -527,57 +557,82 @@ async function resolveVariety(conn, speciesId, varietyName) {
   return rows[0]?.id
 }
 
-async function resolveSeason(conn, seasonInput) {
+async function resolveSeason(conn, seasonInput, audit) {
   const code = toCode(seasonInput?.code || seasonInput?.name || 'TEMPORADA_GENERAL')
   const name = normalizeMasterName(seasonInput?.name || seasonInput?.code || 'Temporada general')
   const isCurrent = seasonInput?.isCurrent ? 1 : 0
+  const clause = buildImportAuditClause(
+    [
+      { col: 'name', expr: 'VALUES(name)', text: true },
+      { col: 'is_current', expr: 'VALUES(is_current)' },
+      { col: 'is_active', expr: '1' },
+    ],
+    { audit },
+  )
   await conn.execute(
     `INSERT INTO seasons (code, name, is_current, is_active)
      VALUES (?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
+       ${withAuditClause(clause)}
        name = VALUES(name),
        is_current = VALUES(is_current),
        is_active = 1`,
     [code, name, isCurrent],
   )
   if (isCurrent === 1) {
-    await conn.execute('UPDATE seasons SET is_current = 0 WHERE code <> ?', [code])
+    const unset = buildUnsetCurrentSeason({ audit, actor: 'import' })
+    await conn.execute(unset.sql, unset.params(code))
     await conn.execute('UPDATE seasons SET is_current = 1 WHERE code = ?', [code])
   }
   const [rows] = await conn.execute('SELECT id FROM seasons WHERE code = ? LIMIT 1', [code])
   return rows[0]?.id
 }
 
-async function fetchMastersBundle(pool) {
+// Alta o edición manual de un maestro, con autor tomado solo de la sesión (nunca del cuerpo).
+// `executor` es el pool o una conexión de transacción. insertCols/insertValues solo difieren
+// de cols/values cuando el alta fija columnas que la edición no toca (p. ej. source).
+async function saveMaster(executor, audit, userId, table, cols, values, id, insertCols = cols, insertValues = values) {
+  if (id) {
+    const upd = buildAuditedUpdate(table, cols, { audit })
+    await executor.execute(upd.sql, upd.params(values, userId, id))
+  } else {
+    const ins = buildAuditedInsert(table, insertCols, { audit })
+    await executor.execute(ins.sql, ins.params(insertValues, userId))
+  }
+}
+
+const CODE_NAME_COLS = [{ name: 'code', text: true }, { name: 'name', text: true }, { name: 'is_active' }]
+
+async function fetchMastersBundle(pool, audit) {
+  const ready = Boolean(audit)
+  const sel = (alias) => auditSelect(alias, ready)
+  const joins = (alias) => auditJoins(alias, ready)
+  const map = (rows) => rows.map(mapAuditRow)
   const [seasons] = await pool.execute(
-    `SELECT id, code, name, starts_on, ends_on, is_current, is_active
-     FROM seasons
-     ORDER BY is_current DESC, code DESC`,
+    `SELECT t.id, t.code, t.name,
+            DATE_FORMAT(t.starts_on, '%Y-%m-%d') AS starts_on,
+            DATE_FORMAT(t.ends_on, '%Y-%m-%d') AS ends_on,
+            t.is_current, t.is_active, ${sel('t')}
+     FROM seasons t ${joins('t')}
+     ORDER BY t.is_current DESC, t.code DESC`,
   )
-  const [companies] = await pool.execute(
-    `SELECT id, code, name, is_active
-     FROM companies
-     ORDER BY name`,
-  )
-  const [species] = await pool.execute(
-    `SELECT id, code, name, is_active
-     FROM species
-     ORDER BY name`,
-  )
-  const [csg] = await pool.execute(
-    `SELECT id, code, name, is_active
-     FROM csg_catalog
-     ORDER BY name`,
-  )
-  const [jcForemen] = await pool.execute(
-    `SELECT id, code, name, is_active
-     FROM jc_foremen
-     ORDER BY name`,
-  )
+  const simple = async (table) => {
+    const [rows] = await pool.execute(
+      `SELECT t.id, t.code, t.name, t.is_active, ${sel('t')}
+       FROM ${table} t ${joins('t')}
+       ORDER BY t.name`,
+    )
+    return rows
+  }
+  const companies = await simple('companies')
+  const species = await simple('species')
+  const csg = await simple('csg_catalog')
+  const jcForemen = await simple('jc_foremen')
   const [varieties] = await pool.execute(
-    `SELECT v.id, v.code, v.name, v.species_id, s.name AS species_name, v.is_active
+    `SELECT v.id, v.code, v.name, v.species_id, s.name AS species_name, v.is_active, ${sel('v')}
      FROM varieties v
      INNER JOIN species s ON s.id = v.species_id
+     ${joins('v')}
      ORDER BY s.name, v.name`,
   )
   const [relations] = await pool.execute(
@@ -588,16 +643,25 @@ async function fetchMastersBundle(pool) {
        scc.species_id, sp.name AS species_name,
        scc.variety_id, v.name AS variety_name,
        scc.csg_id, cs.name AS csg_name,
-       scc.is_active
+       scc.is_active, ${sel('scc')}
      FROM season_cost_centers scc
      INNER JOIN seasons se ON se.id = scc.season_id
      INNER JOIN companies c ON c.id = scc.company_id
      INNER JOIN species sp ON sp.id = scc.species_id
      INNER JOIN varieties v ON v.id = scc.variety_id
      INNER JOIN csg_catalog cs ON cs.id = scc.csg_id
+     ${joins('scc')}
      ORDER BY se.code DESC, c.name, scc.center_code`,
   )
-  return { seasons, companies, species, csg, jcForemen, varieties, relations }
+  return {
+    seasons: map(seasons),
+    companies: map(companies),
+    species: map(species),
+    csg: map(csg),
+    jcForemen: map(jcForemen),
+    varieties: map(varieties),
+    relations: map(relations),
+  }
 }
 
 function buildLabelSchemaState(existingColumns) {
@@ -683,10 +747,12 @@ async function main() {
 
   let pool = await createPool()
   let labelSchema = buildLabelSchemaState([])
+  let mastersAuditReady = false
   if (pool) {
     try {
       await ensureBaseData(pool)
       await ensureMovementsSchema(pool)
+      mastersAuditReady = await ensureMastersAuditSchema(pool)
       labelSchema = await detectLabelSchema(pool)
     } catch (error) {
       console.error('[sync-api] Error inicializando datos base en MySQL:', error)
@@ -702,6 +768,7 @@ async function main() {
   const app = express()
   app.locals.pool = pool
   app.locals.labelSchema = labelSchema
+  app.locals.mastersAuditReady = mastersAuditReady
 
   // Render antepone un proxy: con TRUST_PROXY=1 req.ip es la IP real del cliente.
   app.set('trust proxy', limitFromEnv('TRUST_PROXY', 1))
@@ -977,9 +1044,23 @@ async function main() {
       if (!conn) return
       try {
         await conn.beginTransaction()
-        const seasonId = await resolveSeason(conn, req.body?.season || {})
+        const audit = Boolean(req.app.locals.mastersAuditReady)
+        const seasonId = await resolveSeason(conn, req.body?.season || {}, audit)
         if (!seasonId) throw new Error('season_error')
 
+        const sccAuditClause = withAuditClause(
+          buildImportAuditClause(
+            [
+              { col: 'center_name', expr: 'VALUES(center_name)', text: true },
+              { col: 'species_id', expr: 'VALUES(species_id)' },
+              { col: 'variety_id', expr: 'VALUES(variety_id)' },
+              { col: 'csg_id', expr: 'VALUES(csg_id)' },
+              { col: 'is_active', expr: '1' },
+              { col: 'source', expr: "'excel'", text: true },
+            ],
+            { audit },
+          ),
+        )
         let applied = 0
         for (const raw of rows) {
           const empresa = normalizeMasterName(raw?.empresa)
@@ -989,16 +1070,17 @@ async function main() {
           const csg = normalizeMasterName(raw?.csg)
           if (!empresa || !centroCosto || !especie || !variedad || !csg) continue
 
-          const companyId = await upsertByCodeAndName(conn, 'companies', empresa, empresa)
-          const speciesId = await upsertByCodeAndName(conn, 'species', especie, especie)
-          const varietyId = await resolveVariety(conn, speciesId, variedad)
-          const csgId = await upsertByCodeAndName(conn, 'csg_catalog', csg, csg)
+          const companyId = await upsertByCodeAndName(conn, 'companies', empresa, empresa, audit)
+          const speciesId = await upsertByCodeAndName(conn, 'species', especie, especie, audit)
+          const varietyId = await resolveVariety(conn, speciesId, variedad, audit)
+          const csgId = await upsertByCodeAndName(conn, 'csg_catalog', csg, csg, audit)
 
           await conn.execute(
             `INSERT INTO season_cost_centers
                (season_id, company_id, center_code, center_name, species_id, variety_id, csg_id, is_active, source)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'excel')
              ON DUPLICATE KEY UPDATE
+               ${sccAuditClause}
                center_name = VALUES(center_name),
                species_id = VALUES(species_id),
                variety_id = VALUES(variety_id),
@@ -1040,11 +1122,11 @@ async function main() {
     '/api/admin/masters',
     authMiddleware,
     requireRoles(...ACCESS.MASTER_ADMIN),
-    async (_req, res) => {
+    async (req, res) => {
       if (!requireDb(pool, res)) return
       try {
-        const data = await fetchMastersBundle(pool)
-        return res.json(data)
+        const data = await fetchMastersBundle(pool, req.app.locals.mastersAuditReady)
+        return res.json({ ok: true, ...data })
       } catch (error) {
         console.error('[sync-api] GET /api/admin/masters', error)
         return res.status(500).json({ ok: false, error: 'db' })
@@ -1059,33 +1141,38 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 30)
+      const name = normalizeLimitedText(req.body?.name, 120)
       if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
-      const startsOn = normalizeMasterName(req.body?.startsOn) || null
-      const endsOn = normalizeMasterName(req.body?.endsOn) || null
+      const starts = normalizeSeasonDate(req.body?.startsOn)
+      const ends = normalizeSeasonDate(req.body?.endsOn)
+      if (!starts.valid || !ends.valid) return res.status(400).json({ ok: false, error: 'invalid_payload' })
       const isCurrent = toBit(req.body?.isCurrent, 0)
       const isActive = toBit(req.body?.isActive, 1)
+      const audit = Boolean(req.app.locals.mastersAuditReady)
       const conn = await getConnectionOr503(pool, res)
       if (!conn) return
       try {
         await conn.beginTransaction()
-        if (id) {
-          await conn.execute(
-            `UPDATE seasons
-             SET code = ?, name = ?, starts_on = ?, ends_on = ?, is_current = ?, is_active = ?
-             WHERE id = ?`,
-            [code, name, startsOn, endsOn, isCurrent, isActive, id],
-          )
-        } else {
-          await conn.execute(
-            `INSERT INTO seasons (code, name, starts_on, ends_on, is_current, is_active)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [code, name, startsOn, endsOn, isCurrent, isActive],
-          )
-        }
+        await saveMaster(
+          conn,
+          audit,
+          req.auth.userId,
+          'seasons',
+          [
+            { name: 'code', text: true },
+            { name: 'name', text: true },
+            { name: 'starts_on' },
+            { name: 'ends_on' },
+            { name: 'is_current' },
+            { name: 'is_active' },
+          ],
+          [code, name, starts.value, ends.value, isCurrent, isActive],
+          id,
+        )
         if (isCurrent === 1) {
-          await conn.execute('UPDATE seasons SET is_current = 0 WHERE code <> ?', [code])
+          const unset = buildUnsetCurrentSeason({ audit, actor: 'user' })
+          await conn.execute(unset.sql, unset.params(code, req.auth.userId))
           await conn.execute('UPDATE seasons SET is_current = 1 WHERE code = ?', [code])
         }
         await conn.commit()
@@ -1107,25 +1194,12 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 60)
+      const name = normalizeLimitedText(req.body?.name, 180)
       if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
       const isActive = toBit(req.body?.isActive, 1)
       try {
-        if (id) {
-          await pool.execute(`UPDATE companies SET code = ?, name = ?, is_active = ? WHERE id = ?`, [
-            code,
-            name,
-            isActive,
-            id,
-          ])
-        } else {
-          await pool.execute(`INSERT INTO companies (code, name, is_active) VALUES (?, ?, ?)`, [
-            code,
-            name,
-            isActive,
-          ])
-        }
+        await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'companies', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/companies', error)
@@ -1141,25 +1215,12 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 60)
+      const name = normalizeLimitedText(req.body?.name, 180)
       if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
       const isActive = toBit(req.body?.isActive, 1)
       try {
-        if (id) {
-          await pool.execute(`UPDATE species SET code = ?, name = ?, is_active = ? WHERE id = ?`, [
-            code,
-            name,
-            isActive,
-            id,
-          ])
-        } else {
-          await pool.execute(`INSERT INTO species (code, name, is_active) VALUES (?, ?, ?)`, [
-            code,
-            name,
-            isActive,
-          ])
-        }
+        await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'species', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/species', error)
@@ -1175,25 +1236,12 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 60)
+      const name = normalizeLimitedText(req.body?.name, 180)
       if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
       const isActive = toBit(req.body?.isActive, 1)
       try {
-        if (id) {
-          await pool.execute(`UPDATE csg_catalog SET code = ?, name = ?, is_active = ? WHERE id = ?`, [
-            code,
-            name,
-            isActive,
-            id,
-          ])
-        } else {
-          await pool.execute(`INSERT INTO csg_catalog (code, name, is_active) VALUES (?, ?, ?)`, [
-            code,
-            name,
-            isActive,
-          ])
-        }
+        await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'csg_catalog', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/csg', error)
@@ -1209,25 +1257,12 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 60)
+      const name = normalizeLimitedText(req.body?.name, 180)
       if (!code || !name) return res.status(400).json({ ok: false, error: 'invalid_payload' })
       const isActive = toBit(req.body?.isActive, 1)
       try {
-        if (id) {
-          await pool.execute(`UPDATE jc_foremen SET code = ?, name = ?, is_active = ? WHERE id = ?`, [
-            code,
-            name,
-            isActive,
-            id,
-          ])
-        } else {
-          await pool.execute(`INSERT INTO jc_foremen (code, name, is_active) VALUES (?, ?, ?)`, [
-            code,
-            name,
-            isActive,
-          ])
-        }
+        await saveMaster(pool, Boolean(req.app.locals.mastersAuditReady), req.auth.userId, 'jc_foremen', CODE_NAME_COLS, [code, name, isActive], id)
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/jc-foremen', error)
@@ -1243,28 +1278,23 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       const id = Number(req.body?.id || 0) || null
-      const code = normalizeMasterName(req.body?.code)
-      const name = normalizeMasterName(req.body?.name)
+      const code = normalizeLimitedText(req.body?.code, 60)
+      const name = normalizeLimitedText(req.body?.name, 180)
       const speciesId = Number(req.body?.speciesId || 0)
       if (!code || !name || !speciesId) {
         return res.status(400).json({ ok: false, error: 'invalid_payload' })
       }
       const isActive = toBit(req.body?.isActive, 1)
       try {
-        if (id) {
-          await pool.execute(
-            `UPDATE varieties
-             SET code = ?, name = ?, species_id = ?, is_active = ?
-             WHERE id = ?`,
-            [code, name, speciesId, isActive, id],
-          )
-        } else {
-          await pool.execute(
-            `INSERT INTO varieties (code, name, species_id, is_active)
-             VALUES (?, ?, ?, ?)`,
-            [code, name, speciesId, isActive],
-          )
-        }
+        await saveMaster(
+          pool,
+          Boolean(req.app.locals.mastersAuditReady),
+          req.auth.userId,
+          'varieties',
+          [{ name: 'code', text: true }, { name: 'name', text: true }, { name: 'species_id' }, { name: 'is_active' }],
+          [code, name, speciesId, isActive],
+          id,
+        )
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/varieties', error)
@@ -1282,8 +1312,8 @@ async function main() {
       const id = Number(req.body?.id || 0) || null
       const seasonId = Number(req.body?.seasonId || 0)
       const companyId = Number(req.body?.companyId || 0)
-      const centerCode = normalizeMasterName(req.body?.centerCode)
-      const centerName = normalizeMasterName(req.body?.centerName)
+      const centerCode = normalizeLimitedText(req.body?.centerCode, 80)
+      const centerName = normalizeLimitedText(req.body?.centerName, 180)
       const speciesId = Number(req.body?.speciesId || 0)
       const varietyId = Number(req.body?.varietyId || 0)
       const csgId = Number(req.body?.csgId || 0)
@@ -1292,22 +1322,28 @@ async function main() {
         return res.status(400).json({ ok: false, error: 'invalid_payload' })
       }
       try {
-        if (id) {
-          await pool.execute(
-            `UPDATE season_cost_centers
-             SET season_id = ?, company_id = ?, center_code = ?, center_name = ?,
-                 species_id = ?, variety_id = ?, csg_id = ?, is_active = ?
-             WHERE id = ?`,
-            [seasonId, companyId, centerCode, centerName, speciesId, varietyId, csgId, isActive, id],
-          )
-        } else {
-          await pool.execute(
-            `INSERT INTO season_cost_centers
-               (season_id, company_id, center_code, center_name, species_id, variety_id, csg_id, is_active, source)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin')`,
-            [seasonId, companyId, centerCode, centerName, speciesId, varietyId, csgId, isActive],
-          )
-        }
+        const cols = [
+          { name: 'season_id' },
+          { name: 'company_id' },
+          { name: 'center_code', text: true },
+          { name: 'center_name', text: true },
+          { name: 'species_id' },
+          { name: 'variety_id' },
+          { name: 'csg_id' },
+          { name: 'is_active' },
+        ]
+        const values = [seasonId, companyId, centerCode, centerName, speciesId, varietyId, csgId, isActive]
+        await saveMaster(
+          pool,
+          Boolean(req.app.locals.mastersAuditReady),
+          req.auth.userId,
+          'season_cost_centers',
+          cols,
+          values,
+          id,
+          [...cols, { name: 'source' }],
+          [...values, 'admin'],
+        )
         return res.json({ ok: true })
       } catch (error) {
         console.error('[sync-api] POST /api/admin/relations', error)
