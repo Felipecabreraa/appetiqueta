@@ -184,8 +184,10 @@ function App() {
     return () => window.clearTimeout(id)
   }, [accessDeniedMessage])
 
+  // Depende de `role` (no de `user`): al validar la sesión, `user` cambia de objeto sin cambiar de rol,
+  // y re-aplicar el hash (ya reescrito al módulo por defecto) borraba el aviso de permiso denegado.
   useEffect(() => {
-    if (!user || urlBoot.operational) return
+    if (!role || urlBoot.operational) return
     const applyHashTab = () => {
       const hashTab = readTabFromHash()
       if (!hashTab) return
@@ -196,7 +198,7 @@ function App() {
     applyHashTab()
     window.addEventListener('hashchange', applyHashTab)
     return () => window.removeEventListener('hashchange', applyHashTab)
-  }, [user, navigateToTab])
+  }, [role, navigateToTab])
 
   useEffect(() => {
     if (!role || urlBoot.operational) return
