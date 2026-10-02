@@ -55,7 +55,8 @@ export async function login(username: string, password: string): Promise<LoginRe
     saveSession(token, user)
     return { ok: true, user }
   } catch {
-    return { ok: false, message: loginErrorMessage('network') }
+    // Falla posterior a la respuesta (p. ej. storage bloqueado): no es un problema de red.
+    return { ok: false, message: loginErrorMessage(0) }
   }
 }
 
