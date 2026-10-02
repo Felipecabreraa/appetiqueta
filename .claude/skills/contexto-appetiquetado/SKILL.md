@@ -21,9 +21,11 @@ Maestros por temporada: `Empresa → CC (centro de costo) → {Especie, Variedad
 ## Roles
 | Rol | Acceso |
 |---|---|
-| superadmin | todo, incluidos Maestros y Usuarios |
-| admin | Resumen, Crear etiquetas, Registrar lecturas, exportar el Excel de trackeo |
+| superadmin | todo, incluidos Maestros y Usuarios (solo él administra Usuarios) |
+| admin | Resumen, Crear etiquetas, Registrar lecturas, **Maestros** (incluida la importación Excel), exportar el Excel de trackeo. No accede a Usuarios |
 | operador | Crear etiquetas, Registrar lecturas |
+
+Auditoría de maestros: las 7 tablas de maestros llevan `created_by`/`updated_by` (FK a `users`, NULL = histórico o importación Excel); el autor sale siempre de la sesión, y la lógica vive en `server/masterAudit.cjs`.
 
 Los roles se validan **en ambos lados**: `src/lib/roleAccess.ts` (UI) y `ACCESS` + `requireRoles` en `server/index.cjs` (API). Un cambio de permisos debe tocar los dos.
 
