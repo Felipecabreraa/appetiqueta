@@ -6,6 +6,18 @@ import { spawn } from 'node:child_process'
 import { loadTestEnv, resetTestDb } from './test-env.mjs'
 
 const env = loadTestEnv()
+
+// CA-27: la migración de auditoría de maestros se prueba antes de levantar la API del E2E
+// (arranca y apaga la API dos veces, y deja la BD reseteada al terminar).
+const migracion = await new Promise((resolve) => {
+  const run = spawn(process.execPath, ['scripts/e2e-migracion-maestros.mjs'], { env: { ...process.env, ...env }, stdio: 'inherit' })
+  run.on('exit', (code) => resolve(code ?? 1))
+})
+if (migracion !== 0) {
+  console.error('La prueba de migración de maestros (CA-27) falló.')
+  process.exit(migracion)
+}
+
 await resetTestDb(env)
 const api = `http://127.0.0.1:${env.PORT}`
 const childEnv = { ...process.env, ...env }

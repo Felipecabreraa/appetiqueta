@@ -33,18 +33,16 @@ test('CA-05: operador que fuerza la URL de Maestros es redirigido a su módulo p
   await expect(page.getByRole('heading', { name: 'Carga maestra desde Excel' })).toHaveCount(0)
 })
 
-test('CA-05: admin ve Resumen, Crear etiquetas y Lecturas, no Maestros/Usuarios, y sí exporta', async ({ page, request }) => {
+test('CA-01: admin ve Resumen, Crear etiquetas, Lecturas y Maestros, no Usuarios, y sí exporta', async ({ page, request }) => {
   const u = await crearUsuario(request, 'admin')
   await loginAs(page, u.username, u.password)
   await page.goto('/')
   await abrirMenuSiHaceFalta(page)
 
-  for (const nombre of ['Resumen', 'Crear etiquetas', 'Registrar lecturas']) {
+  for (const nombre of ['Resumen', 'Crear etiquetas', 'Registrar lecturas', 'Maestros']) {
     await expect(modulos(page).getByRole('button', { name: nombre, exact: true })).toBeVisible()
   }
-  for (const nombre of ['Maestros', 'Usuarios']) {
-    await expect(modulos(page).getByRole('button', { name: nombre, exact: true })).toHaveCount(0)
-  }
+  await expect(modulos(page).getByRole('button', { name: 'Usuarios', exact: true })).toHaveCount(0)
 
   await modulos(page).getByRole('button', { name: 'Registrar lecturas', exact: true }).click()
   const boton = page.getByRole('button', { name: 'Descargar Excel (.xlsx)' })

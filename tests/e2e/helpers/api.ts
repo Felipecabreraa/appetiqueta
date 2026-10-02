@@ -68,15 +68,54 @@ export async function cicloJcAcopio(
 export async function crearUsuario(
   request: APIRequestContext,
   role: 'admin' | 'operador',
-): Promise<{ username: string; password: string }> {
+  fullName?: string,
+): Promise<{ username: string; password: string; fullName: string }> {
   const username = `e2e_${role}_${sufijo().toLowerCase()}`
   const password = `Pw-${sufijo()}`
+  const nombre = fullName ?? `E2E ${role}`
   const res = await request.post(`${API()}/api/admin/users`, {
     headers: { Authorization: `Bearer ${await adminToken(request)}` },
-    data: { username, fullName: `E2E ${role}`, password, role },
+    data: { username, fullName: nombre, password, role },
   })
   expect((await res.json()).ok).toBe(true)
-  return { username, password }
+  return { username, password, fullName: nombre }
+}
+
+export type SesionE2E = {
+  token: string
+  user: { id: number; username: string; fullName?: string; role?: string }
+  username: string
+  password: string
+  fullName: string
+}
+
+/** Crea un usuario del rol dado (con nombre completo opcional) y devuelve su sesión (token + user). */
+export async function loginUsuario(
+  request: APIRequestContext,
+  role: 'admin' | 'operador',
+  fullName?: string,
+): Promise<SesionE2E> {
+  const u = await crearUsuario(request, role, fullName)
+  const res = await request.post(`${API()}/api/auth/login`, { data: { username: u.username, password: u.password } })
+  const body = await res.json()
+  expect(body.ok).toBe(true)
+  return { ...u, token: body.token as string, user: body.user }
+}
+
+/** Sesión del superadmin de pruebas (token + user con id). */
+export async function loginSuper(request: APIRequestContext): Promise<SesionE2E> {
+  const res = await request.post(`${API()}/api/auth/login`, {
+    data: { username: process.env.E2E_USER, password: process.env.E2E_PASS },
+  })
+  const body = await res.json()
+  expect(body.ok).toBe(true)
+  return {
+    token: body.token as string,
+    user: body.user,
+    username: process.env.E2E_USER!,
+    password: process.env.E2E_PASS!,
+    fullName: body.user?.fullName ?? '',
+  }
 }
 
 /** En móvil el menú está colapsado: abre el menú hamburguesa si es visible (en desktop no lo es). */
