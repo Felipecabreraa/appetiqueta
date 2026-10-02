@@ -20,4 +20,10 @@
 Solo frontend (MasterDataView.tsx, App.css). Rollback: `git revert` del merge o redeploy del commit anterior.
 
 ## Publicación en staging
-(pendiente)
+- 2026-10-02: publicado en staging (075a1e9), CI verde.
+
+
+## Aprobación para producción
+- **Fecha y hora:** 2026-10-02 20:44 (America/Santiago)
+- **Frase textual del usuario:** "Sí, apruebo publicar en producción" (respuesta a "¿Apruebas publicar en producción estos 4 cambios?", tras ver el paquete: admin-maestros, exportar-maestros-excel, esquema-y-errores-login y ui-carga-excel, con migración, rollback y comprobaciones previas).
+- **Comprobaciones previas pedidas al usuario (BD de producción, solo lectura):** `SHOW GRANTS FOR CURRENT_USER();` (ALTER/REFERENCES) y conteo de relaciones con variedad de otra especie.

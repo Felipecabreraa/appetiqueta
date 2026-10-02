@@ -1,3 +1,4 @@
 - [Puertos y selectores E2E](entorno-puertos-playwright.md) — choque 3101/5173 con el Lead, config temporal y selectores de Maestros
 - [Colisiones de entorno](entorno-colisiones.md) — names únicos entre desktop/movil; rama compartida y commits ajenos
 - [Esquema al arrancar E2E](esquema-arranque-e2e.md) — script de escenarios, CA-05 necesita MYSQL_ADMIN_*, selectores login/Maestros
+- [Exportar maestros E2E](exportar-maestros-e2e.md) — XLSX.readFile no existe en ESM, zsh ${=VAR}, puertos 3131/5186 y helpers nuevos
