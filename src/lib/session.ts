@@ -3,8 +3,8 @@ import type { AuthUser } from '../types'
 const TOKEN_KEY = 'appetiquetado:auth:token'
 const USER_KEY = 'appetiquetado:auth:user'
 
-export function getSessionToken(): string {
-  return localStorage.getItem(TOKEN_KEY) || ''
+export function getSessionToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY) || null
 }
 
 export function saveSession(token: string, user: AuthUser): void {

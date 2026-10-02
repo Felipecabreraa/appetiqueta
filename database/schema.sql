@@ -1,5 +1,8 @@
 -- App Etiquetado — Esquema productivo, relacional y escalable.
--- Motor objetivo: MySQL 8.0+ (InnoDB, utf8mb4).
+-- Motor objetivo: MariaDB 10.6 / MySQL 8+ (InnoDB, utf8mb4).
+-- Regla de formato: el servidor (server/schemaBootstrap.cjs) extrae al arrancar solo las sentencias
+-- CREATE TABLE IF NOT EXISTS. Cada sentencia debe terminar en ';' al final de línea y no se usa ';'
+-- dentro de un COMMENT. No se ejecutan los SET ni los INSERT de este archivo al arrancar.
 -- Incluye:
 -- 1) Maestros por temporada (empresa, especie, variedad, CSG, CC)
 -- 2) Relación dinámica empresa -> CC -> (especie, variedad, CSG)

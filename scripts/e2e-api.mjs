@@ -18,6 +18,17 @@ if (migracion !== 0) {
   process.exit(migracion)
 }
 
+// Esquema autorreparable y estado del esquema (spec 20261002-esquema-y-errores-login): arranca/apaga la API
+// varias veces y deja la BD reseteada al terminar. CA-05 usa MYSQL_ADMIN_USER/MYSQL_ADMIN_PASSWORD si existen.
+const esquema = await new Promise((resolve) => {
+  const run = spawn(process.execPath, ['scripts/e2e-esquema-arranque.mjs'], { env: { ...process.env, ...env }, stdio: 'inherit' })
+  run.on('exit', (code) => resolve(code ?? 1))
+})
+if (esquema !== 0) {
+  console.error('La prueba de esquema al arrancar (CA-01..CA-05, CA-07, CA-08, CA-15, CA-16) falló.')
+  process.exit(esquema)
+}
+
 // CA-19: exportar y reimportar 5000 relaciones. Arranca su propia API y resetea la BD antes y después
 // (--experimental-strip-types: carga src/lib/masterExcel.ts con Node, sin compilar).
 const volumen = await new Promise((resolve) => {
