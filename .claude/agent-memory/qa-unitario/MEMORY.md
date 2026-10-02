@@ -1,0 +1,1 @@
+- [Patrones de prueba unitaria](patrones-unit.md) — cjs con createRequire, pool falso, config vitest

@@ -1,0 +1,1 @@
+- [Puertos y selectores E2E](entorno-puertos-playwright.md) — choque 3101/5173 con el Lead, config temporal y selectores de Maestros
