@@ -8,7 +8,7 @@ const express = require('express')
 const cors = require('cors')
 const mysql = require('mysql2/promise')
 const { checkEnvironment } = require('./envGuard.cjs')
-const { createRateLimiter, limitFromEnv } = require('./rateLimit.cjs')
+const { createRateLimiter, limitFromEnv, clientIpOf } = require('./rateLimit.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
 const distPath = path.join(__dirname, '..', 'dist')
@@ -715,7 +715,7 @@ async function main() {
       env: envCheck.env,
       dbReady,
       // Permite verificar en Render que la IP real del cliente se detecta tras el proxy (límites por IP).
-      clientIp: _req.ip,
+      clientIp: clientIpOf(_req),
     })
   })
 
@@ -1423,7 +1423,7 @@ async function main() {
           payload.precioClp,
           payload.jh,
           req.auth?.userId ?? null,
-          String(req.ip || '').slice(0, 45) || null,
+          clientIpOf(req).slice(0, 45),
           String(req.get('user-agent') || '').slice(0, 255) || null,
         ],
       )

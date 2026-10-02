@@ -5,6 +5,16 @@
  * Con `countIf(res)` solo quedan contadas las respuestas que cumplen la condición (p. ej. login fallido);
  * mientras una petición está en curso cuenta como intento, para que una ráfaga paralela no pase.
  */
+/**
+ * IP real del cliente. Render recibe el tráfico a través de Cloudflare: req.ip (con trust proxy) es la IP
+ * del borde de Cloudflare, compartida por muchos usuarios. Cloudflare escribe CF-Connecting-IP con la IP
+ * del cliente y sobrescribe cualquier valor que este envíe, así que no se puede falsificar a través del proxy.
+ */
+function clientIpOf(req) {
+  const cf = typeof req.get === 'function' ? String(req.get('cf-connecting-ip') || '').trim() : ''
+  return cf || req.ip || 'desconocida'
+}
+
 function createRateLimiter({ windowMs, max, now = Date.now, countIf }) {
   if (!Number.isFinite(max) || max <= 0) {
     return (_req, _res, next) => next()
@@ -27,7 +37,7 @@ function createRateLimiter({ windowMs, max, now = Date.now, countIf }) {
       for (const [key, entry] of hits) if (entry.resetAt <= t) hits.delete(key)
       lastSweep = t
     }
-    const key = req.ip || 'desconocida'
+    const key = clientIpOf(req)
     const entry = entryFor(key, t)
 
     const block = () => {
@@ -59,4 +69,4 @@ function limitFromEnv(name, fallback) {
   return Number.isFinite(n) ? n : fallback
 }
 
-module.exports = { createRateLimiter, limitFromEnv }
+module.exports = { createRateLimiter, limitFromEnv, clientIpOf }

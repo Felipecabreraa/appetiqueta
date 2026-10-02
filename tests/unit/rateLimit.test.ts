@@ -3,7 +3,8 @@ import { createRequire } from 'node:module'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { createRateLimiter } = require('../../server/rateLimit.cjs') as {
+const { createRateLimiter, clientIpOf } = require('../../server/rateLimit.cjs') as {
+  clientIpOf: (req: { ip?: string; get?: (h: string) => string | undefined }) => string
   createRateLimiter: (o: {
     windowMs: number
     max: number
@@ -102,6 +103,24 @@ describe('rate limiter', () => {
     let passed = 0
     for (let i = 0; i < 1000; i++) mw({ ip: '1.1.1.1' }, fakeRes().res, () => passed++)
     expect(passed).toBe(1000)
+  })
+})
+
+describe('IP real detrás de Cloudflare (Render)', () => {
+  it('usa CF-Connecting-IP cuando existe; si no, req.ip', () => {
+    const headers: Record<string, string> = { 'cf-connecting-ip': '200.1.2.3' }
+    expect(clientIpOf({ ip: '172.64.205.12', get: (h) => headers[h] })).toBe('200.1.2.3')
+    expect(clientIpOf({ ip: '10.0.0.9', get: () => undefined })).toBe('10.0.0.9')
+    expect(clientIpOf({})).toBe('desconocida')
+  })
+
+  it('usuarios distintos tras el mismo borde de Cloudflare no comparten contador', () => {
+    const mw = createRateLimiter({ windowMs: 60_000, max: 1 })
+    const req = (ip: string) => ({ ip: '172.64.205.12', get: (h: string) => (h === 'cf-connecting-ip' ? ip : undefined) })
+    let passed = 0
+    mw(req('200.0.0.1'), fakeRes().res, () => passed++)
+    mw(req('200.0.0.2'), fakeRes().res, () => passed++)
+    expect(passed).toBe(2)
   })
 })
 
