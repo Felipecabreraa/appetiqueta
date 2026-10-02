@@ -249,6 +249,8 @@ CREATE TABLE IF NOT EXISTS movements (
   precio_clp INT UNSIGNED NULL COMMENT 'Respaldo de precio en primer trackeo JC',
   jh INT UNSIGNED NULL COMMENT 'Personas en cuadrilla (primer trackeo JC)',
   created_by BIGINT UNSIGNED NULL,
+  client_ip VARCHAR(45) NULL COMMENT 'Auditoría: IP de origen de la lectura',
+  user_agent VARCHAR(255) NULL COMMENT 'Auditoría: navegador/dispositivo',
   PRIMARY KEY (id),
   KEY idx_movements_label_at (label_id, at),
   KEY idx_movements_created_by (created_by),
