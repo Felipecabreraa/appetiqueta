@@ -392,3 +392,21 @@
 .operational-stale-notice {
   margin: 12px 16px 0;
 }
+
+/* Pantallas de escaneo compactas: título y código en una línea; solo los campos a completar. */
+.operational-header--compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.operational-header--compact .operational-title {
+  margin: 0;
+}
+
+.operational-header--compact .operational-code-pill {
+  margin: 0;
+}

@@ -86,18 +86,12 @@ export function OperationalAcopioForm({
   return (
     <div className="operational-app">
       <div className="operational-inner">
-        <header className="operational-header">
-          <p className="operational-eyebrow">Llegada al acopio</p>
+        <header className="operational-header operational-header--compact">
           <h1 className="operational-title">Registro en acopio</h1>
-          <p className="operational-lead">
-            Ingrese la cantidad de totes recibidos. Al pulsar Guardar, el registro se escribe{' '}
-            <strong>en la base de datos</strong> (obligatorio para el reporte Excel JC / acopio) y
-            queda copiado en este teléfono; espere conexión hasta que no aparezca error.
-          </p>
+          <div className="operational-code-pill">{label.id}</div>
         </header>
 
         <div className="operational-card">
-          <div className="operational-code-pill">{label.id}</div>
 
           <div className="operational-fields">
             <label className="operational-field">

@@ -128,21 +128,12 @@ export function OperationalJcForm({
   return (
     <div className="operational-app">
       <div className="operational-inner">
-        <header className="operational-header">
-          <p className="operational-eyebrow">Salida de campo</p>
+        <header className="operational-header operational-header--compact">
           <h1 className="operational-title">Registro JC</h1>
-          <p className="operational-lead">
-            Confirme los totes que salen y el jefe de cuadrilla. Al pulsar Guardar, el registro se
-            escribe <strong>en la base de datos</strong> (obligatorio para el reporte Excel JC /
-            acopio) y queda copiado en este teléfono; espere conexión hasta que no aparezca error.
-          </p>
+          <div className="operational-code-pill">{label.id}</div>
         </header>
 
         <div className="operational-card">
-          <div className="operational-code-pill">{label.id}</div>
-          <p className="operational-meta">
-            {label.empresa}. {label.especie}, {label.variedad}
-          </p>
 
           <div className="operational-fields">
             <label className="operational-field">
@@ -241,7 +232,7 @@ export function OperationalJcForm({
                   const v = e.target.value
                   setJh(v === '' ? '' : Number(v))
                 }}
-                placeholder="Ej.: 8 (entero, sin decimales)"
+                placeholder="Ej.: 8"
                 autoComplete="off"
               />
             </label>
