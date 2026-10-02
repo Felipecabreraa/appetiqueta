@@ -43,7 +43,9 @@
       "Edit(./.env.production)",
       "Bash(git push --force *)",
       "Bash(git push -f *)",
-      "Bash(git reset --hard *)"
+      "Bash(git reset --hard *)",
+      "Bash(npm run server:prod)",
+      "Bash(npm run server:prod *)"
     ]
   },
   "hooks": {

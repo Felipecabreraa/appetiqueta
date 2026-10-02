@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api-test",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "server:test"
+      ],
+      "port": 3101
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:test"
+      ],
+      "port": 5175
+    },
+    {
+      "name": "api-staging",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "server:staging"
+      ],
+      "port": 3201
+    },
+    {
+      "name": "web-staging",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:staging"
+      ],
+      "port": 5176
+    }
+  ]
+}
