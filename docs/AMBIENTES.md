@@ -60,8 +60,8 @@ Si `schemaComplete=false`: reinicie el servicio (reaplica las tablas y migracion
 
 ## Copiar producción a staging
 1. En Render, **suspenda** `appetiqueta-dev` (Suspend) para que no escriba mientras se importa.
-2. En phpMyAdmin, sobre `trn_etiquetatest`, dentro de **la misma** pestaña SQL: `SET FOREIGN_KEY_CHECKS=0;`, los `DROP TABLE` de las tablas, y `SET FOREIGN_KEY_CHECKS=1;` (o marque "Desactivar la revisión de claves foráneas" al importar).
-3. Importe el dump de producción.
+2. En phpMyAdmin, **confirme que la BD seleccionada es `trn_etiquetatest`** (el usuario también ve producción). Luego, dentro de **la misma** pestaña SQL: `SET FOREIGN_KEY_CHECKS=0;`, los `DROP TABLE` de las tablas, y `SET FOREIGN_KEY_CHECKS=1;`. (La casilla "Desactivar la revisión de claves foráneas" es de la pestaña Importar, no de la pestaña SQL.)
+3. Importe el dump de producción (en la pestaña Importar se puede marcar esa casilla). Después, vacíe `auth_sessions` en staging (`DELETE FROM auth_sessions;` en `trn_etiquetatest`): el dump trae sesiones vigentes de producción.
 4. Reanude el servicio. Al arrancar recrea las tablas que falten y reaplica las migraciones aditivas. Ante una restauración parcial, revise el log `[schema]` (una `roles` recreada vacía se rellena en el orden superadmin, admin, operador).
 5. Verifique: `E2E_REMOTE_URL=<url de staging> npm run test:smoke:remote` (debe haber `schemaComplete=true`).
 6. Efecto en `operational_epoch`: toma el valor de producción, así que los navegadores de staging borran su historial local de lotes y etiquetas (`src/lib/operationalEpoch.ts`).
