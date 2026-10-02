@@ -2322,7 +2322,8 @@ html.scroll-lock .modal-root {
   gap: 1rem 1.2rem;
 }
 
-.label-form label {
+.label-form label,
+.master-excel .master-export-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2352,7 +2353,8 @@ html.scroll-lock .modal-root {
 .label-form input,
 .label-form select,
 .track-form input,
-.track-form select {
+.track-form select,
+.master-excel .master-export-field select {
   font: inherit;
   padding: 0.6rem 0.8rem;
   border-radius: var(--radius-sm);
@@ -2365,14 +2367,16 @@ html.scroll-lock .modal-root {
 .label-form input:hover,
 .label-form select:hover,
 .track-form input:hover,
-.track-form select:hover {
+.track-form select:hover,
+.master-excel .master-export-field select:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
 .label-form input:focus,
 .label-form select:focus,
 .track-form input:focus,
-.track-form select:focus {
+.track-form select:focus,
+.master-excel .master-export-field select:focus {
   outline: 2px solid var(--accent-ring);
   outline-offset: 1px;
   border-color: var(--accent);
@@ -3864,6 +3868,88 @@ html.scroll-lock .modal-root {
   }
 
   .master-export .btn {
+    width: 100%;
+  }
+}
+
+/* Carga desde Excel: dos tarjetas (Exportar / Importar) */
+.master-excel {
+  min-width: 0;
+}
+
+.master-excel .master-excel-section {
+  min-width: 0;
+  margin-top: 1.1rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+}
+
+.master-excel .master-excel-section h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.master-excel .master-excel-section .sub {
+  overflow-wrap: anywhere;
+}
+
+.master-excel .master-export {
+  margin-top: 0.5rem;
+}
+
+.master-excel .master-template {
+  margin: 0 0 0.9rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+}
+
+.master-excel .master-step-title {
+  margin: 0.9rem 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.master-excel .label-form .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.master-excel .label-form label,
+.master-excel .master-export-field {
+  min-width: 0;
+}
+
+.master-excel .label-form input,
+.master-excel .label-form select,
+.master-excel .master-export-field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 560px) {
+  .master-excel {
+    padding: 1rem;
+  }
+
+  .master-excel .master-excel-section {
+    padding: 0.9rem;
+  }
+
+  .master-excel .label-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .master-excel .master-template .btn,
+  .master-excel .form-actions .btn {
     width: 100%;
   }
 }

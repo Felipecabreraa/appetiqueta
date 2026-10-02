@@ -155,103 +155,51 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <section className="card">
+    <section className="card master-excel">
       <h2>Carga maestra desde Excel</h2>
-      <p className="sub">Columnas esperadas: EMPRESA, ESPECIE, VARIEDAD, CC, CSG y NOMBRE CC (opcional).</p>
-      <div className="label-form">
-        <div className="form-grid">
-          <label>
-            Código temporada
-            <input
-              type="text"
-              value={seasonCode}
-              onChange={(e) => setSeasonCode(e.target.value)}
-              placeholder="2026-2027"
-            />
-          </label>
-          <label>
-            Nombre temporada
-            <input
-              type="text"
-              value={seasonName}
-              onChange={(e) => setSeasonName(e.target.value)}
-              placeholder="Temporada 2026-2027"
-            />
-          </label>
-          <label className="full-width">
-            Archivo Excel
-            <input
-              type="file"
-              accept=".xlsx,.xls"
+      <section className="master-excel-section" aria-labelledby="master-excel-exportar-titulo">
+        <h3 id="master-excel-exportar-titulo">Exportar maestros</h3>
+        <p className="sub">
+          Descarga los maestros de una temporada para revisarlos o editarlos y volver a importarlos.
+        </p>
+        <div className="master-export">
+          <label className="master-export-field">
+            Temporada a exportar
+            <select
+              value={exportSeasonId ?? ''}
+              disabled={!exportReady || exportBusy}
               onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) onPickFile(file)
+                setExportSeasonId(Number(e.target.value))
+                setExportMessage(null)
               }}
-            />
-          </label>
-          <label className="full-width">
-            <span className="operational-label">Marcar como temporada actual</span>
-            <select value={isCurrent ? '1' : '0'} onChange={(e) => setIsCurrent(e.target.value === '1')}>
-              <option value="1">Sí</option>
-              <option value="0">No</option>
+            >
+              {seasons.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {`${s.code} - ${s.name}${s.is_active === 1 ? '' : ' (inactiva)'}`}
+                </option>
+              ))}
             </select>
           </label>
-        </div>
-        {rows.length > 0 && (
-          <p className="info-banner">
-            Filas válidas detectadas: <strong>{rows.length}</strong> | Empresas: <strong>{distinctCompanies}</strong>
-          </p>
-        )}
-        {status && <p className="alert success">{status}</p>}
-        {error && <p className="alert error">{error}</p>}
-        <div className="form-actions">
-          <button type="button" className="btn secondary" onClick={downloadTemplate}>
-            Descargar plantilla Excel
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={!exportReady || exportBusy}
+            onClick={() => void exportMasters()}
+          >
+            {exportBusy ? 'Exportando...' : 'Exportar maestros a Excel'}
           </button>
-          <div className="master-export">
-            <label className="master-export-field">
-              Temporada a exportar
-              <select
-                value={exportSeasonId ?? ''}
-                disabled={!exportReady || exportBusy}
-                onChange={(e) => {
-                  setExportSeasonId(Number(e.target.value))
-                  setExportMessage(null)
-                }}
-              >
-                {seasons.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {`${s.code} - ${s.name}${s.is_active === 1 ? '' : ' (inactiva)'}`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="btn secondary"
-              disabled={!exportReady || exportBusy}
-              onClick={() => void exportMasters()}
-            >
-              {exportBusy ? 'Exportando...' : 'Exportar maestros a Excel'}
+          {seasonsLoad === 'error' && (
+            <button type="button" className="btn secondary" onClick={() => void loadSeasons()}>
+              Reintentar
             </button>
-            {seasonsLoad === 'error' && (
-              <button type="button" className="btn secondary" onClick={() => void loadSeasons()}>
-                Reintentar
-              </button>
-            )}
-          </div>
-          <button type="button" className="btn primary" disabled={busy} onClick={() => void submitImport()}>
-            {busy ? 'Importando...' : 'Importar maestros'}
-          </button>
+          )}
         </div>
-        <div className="master-export-info">
-          <div role="status">
-            {seasonsLoad === 'error' && <p className="alert error">{EXPORT_LOAD_ERROR}</p>}
-            {seasonsLoad === 'ready' && seasons.length === 0 && (
-              <p className="alert info">No hay temporadas para exportar.</p>
-            )}
-            {exportMessage && <p className={`alert ${exportMessage.kind}`}>{exportMessage.text}</p>}
-          </div>
+        <div className="master-export-info" role="status">
+          {seasonsLoad === 'error' && <p className="alert error">{EXPORT_LOAD_ERROR}</p>}
+          {seasonsLoad === 'ready' && seasons.length === 0 && (
+            <p className="alert info">No hay temporadas para exportar.</p>
+          )}
+          {exportMessage && <p className={`alert ${exportMessage.kind}`}>{exportMessage.text}</p>}
           {exportReady && selectedSeason && (
             <div className="master-export-notes">
               <p className="sub">
@@ -273,7 +221,75 @@ export function MasterDataView({ onImported }: { onImported: () => void }) {
             </div>
           )}
         </div>
-      </div>
+      </section>
+
+      <section className="master-excel-section" aria-labelledby="master-excel-importar-titulo">
+        <h3 id="master-excel-importar-titulo">Importar maestros desde Excel</h3>
+        <p className="sub">Carga o actualiza empresas, especies, variedades, CC y CSG de una temporada.</p>
+        <p className="master-template">
+          ¿No tiene archivo?{' '}
+          <button type="button" className="btn secondary" onClick={downloadTemplate}>
+            Descargar plantilla Excel
+          </button>
+        </p>
+        <div className="label-form">
+          <p className="master-step-title">1. Temporada</p>
+          <div className="form-grid">
+            <label>
+              Código temporada
+              <input
+                type="text"
+                value={seasonCode}
+                onChange={(e) => setSeasonCode(e.target.value)}
+                placeholder="2026-2027"
+              />
+            </label>
+            <label>
+              Nombre temporada
+              <input
+                type="text"
+                value={seasonName}
+                onChange={(e) => setSeasonName(e.target.value)}
+                placeholder="Temporada 2026-2027"
+              />
+            </label>
+            <label className="full-width">
+              <span className="operational-label">Marcar como temporada actual</span>
+              <select value={isCurrent ? '1' : '0'} onChange={(e) => setIsCurrent(e.target.value === '1')}>
+                <option value="1">Sí</option>
+                <option value="0">No</option>
+              </select>
+            </label>
+          </div>
+          <p className="master-step-title">2. Archivo</p>
+          <div className="form-grid">
+            <label className="full-width">
+              Archivo Excel
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) onPickFile(file)
+                }}
+              />
+            </label>
+          </div>
+          <p className="sub">Columnas esperadas: EMPRESA, ESPECIE, VARIEDAD, CC, CSG y NOMBRE CC (opcional).</p>
+          {rows.length > 0 && (
+            <p className="info-banner">
+              Filas válidas detectadas: <strong>{rows.length}</strong> | Empresas: <strong>{distinctCompanies}</strong>
+            </p>
+          )}
+          {status && <p className="alert success">{status}</p>}
+          {error && <p className="alert error">{error}</p>}
+          <div className="form-actions">
+            <button type="button" className="btn primary" disabled={busy} onClick={() => void submitImport()}>
+              {busy ? 'Importando...' : 'Importar maestros'}
+            </button>
+          </div>
+        </div>
+      </section>
     </section>
   )
 }
