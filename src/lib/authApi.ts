@@ -21,18 +21,28 @@ function parseUser(raw: unknown): AuthUser | null {
   }
 }
 
+export function loginErrorMessage(kind: number | 'network'): string {
+  if (kind === 'network') return 'Sin conexión con el servidor.'
+  if (kind === 401) return 'Usuario o contraseña incorrectos.'
+  if (kind === 429) return 'Demasiados intentos de ingreso. Espere un minuto y vuelva a intentar.'
+  if (kind >= 500 && kind <= 599) return 'El servidor tuvo un problema. Intente más tarde.'
+  return 'No fue posible iniciar sesión.'
+}
+
 export async function login(username: string, password: string): Promise<LoginResult> {
+  let res: Response
   try {
-    const res = await apiFetch('/api/auth/login', {
+    res = await apiFetch('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
+  } catch {
+    return { ok: false, message: loginErrorMessage('network') }
+  }
+  try {
     const data: unknown = await res.json().catch(() => ({}))
-    if (res.status === 429) {
-      return { ok: false, message: 'Demasiados intentos de ingreso. Espere un minuto y vuelva a intentar.' }
-    }
     if (!res.ok) {
-      return { ok: false, message: 'Credenciales inválidas o servidor no disponible.' }
+      return { ok: false, message: loginErrorMessage(res.status) }
     }
     if (!data || typeof data !== 'object') {
       return { ok: false, message: 'Respuesta inválida del servidor.' }
@@ -44,11 +54,8 @@ export async function login(username: string, password: string): Promise<LoginRe
     }
     saveSession(token, user)
     return { ok: true, user }
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : 'Error de red',
-    }
+  } catch {
+    return { ok: false, message: loginErrorMessage('network') }
   }
 }
 
