@@ -19,7 +19,7 @@ const {
   normalizeSeasonDate,
 } = require('./masterAudit.cjs')
 const { bootstrapSchema } = require('./schemaBootstrap.cjs')
-const { buildLabelSchemaState, createSchemaMonitor } = require('./schemaState.cjs')
+const { buildLabelSchemaState, createSchemaMonitor, primeSchema } = require('./schemaState.cjs')
 const { createRateLimiter, limitFromEnv, clientIpOf } = require('./rateLimit.cjs')
 
 const PORT = Number(process.env.PORT || process.env.SYNC_API_PORT || 3001)
@@ -610,8 +610,8 @@ async function main() {
   const monitor = createSchemaMonitor({ pool, locals: app.locals, log: (line) => console.log(line) })
   if (pool) {
     // bootstrapSchema nunca lanza: un error de esquema no anula el pool (el servicio sigue y health informa).
-    await bootstrapSchema(pool, { log: (line) => console.log(line), createPasswordHash })
-    await monitor.refresh({ maxAgeMs: 0 })
+    const boot = await bootstrapSchema(pool, { log: (line) => console.log(line), createPasswordHash })
+    await primeSchema({ monitor, locals: app.locals, mastersAuditReady: boot.mastersAuditReady })
   }
   const dbReady = Boolean(pool)
 
@@ -984,11 +984,12 @@ async function main() {
     async (req, res) => {
       if (!requireDb(pool, res)) return
       for (let attempt = 0; attempt < 2; attempt++) {
+        const used = { mastersAuditReady: Boolean(req.app.locals.mastersAuditReady) }
         try {
-          const data = await fetchMastersBundle(pool, req.app.locals.mastersAuditReady)
+          const data = await fetchMastersBundle(pool, used.mastersAuditReady)
           return res.json({ ok: true, ...data })
         } catch (error) {
-          const changed = await monitor.onRouteError(error, 'GET /api/admin/masters')
+          const changed = await monitor.onRouteError(error, 'GET /api/admin/masters', used)
           if (attempt === 0 && changed) continue
           console.error('[sync-api] GET /api/admin/masters', error)
           return res.status(500).json({ ok: false, error: 'db' })
@@ -1231,8 +1232,9 @@ async function main() {
       return res.status(400).json({ ok: false, error: 'id_invalido' })
     }
     for (let attempt = 0; attempt < 2; attempt++) {
+      const used = { labelSchema: app.locals.labelSchema }
       try {
-        const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
+        const labelFields = getLabelSelectFields(used.labelSchema || buildLabelSchemaState([]))
         const [rows] = await pool.execute(
           `SELECT ${labelFields}
            FROM labels WHERE id = ? LIMIT 1`,
@@ -1254,7 +1256,7 @@ async function main() {
         }
         return res.json({ ok: true, label: rows[0], movements: movementRows })
       } catch (error) {
-        const changed = await monitor.onRouteError(error, 'GET /api/labels/:id')
+        const changed = await monitor.onRouteError(error, 'GET /api/labels/:id', used)
         if (attempt === 0 && changed) continue
         console.error('[sync-api] GET /api/labels/:id', error)
         return res.status(500).json({ ok: false, error: 'db' })
@@ -1423,8 +1425,9 @@ async function main() {
     async (_req, res) => {
       if (!requireDb(pool, res)) return
       for (let attempt = 0; attempt < 2; attempt++) {
+        const used = { labelSchema: app.locals.labelSchema }
         try {
-          const labelFields = getLabelSelectFields(app.locals.labelSchema || buildLabelSchemaState([]))
+          const labelFields = getLabelSelectFields(used.labelSchema || buildLabelSchemaState([]))
           const [labelRows] = await pool.execute(
             `SELECT ${labelFields}
              FROM labels
@@ -1472,7 +1475,7 @@ async function main() {
           }))
           return res.json({ ok: true, labels, movements })
         } catch (error) {
-          const changed = await monitor.onRouteError(error, 'GET /api/reports/tracking-export')
+          const changed = await monitor.onRouteError(error, 'GET /api/reports/tracking-export', used)
           if (attempt === 0 && changed) continue
           console.error('[sync-api] GET /api/reports/tracking-export', error)
           return res.status(500).json({ ok: false, error: 'db' })

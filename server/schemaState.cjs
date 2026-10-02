@@ -54,13 +54,13 @@ function isSchemaError(err) {
   return code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR'
 }
 
-async function detectSchemaState(pool) {
+async function detectSchemaState(pool, { timeoutMs = DETECT_TIMEOUT_MS } = {}) {
   const [rows] = await pool.query({
     sql: `SELECT TABLE_NAME AS TABLE_NAME, COLUMN_NAME AS COLUMN_NAME
           FROM information_schema.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?)`,
     values: [[...BASE_TABLES]],
-    timeout: DETECT_TIMEOUT_MS,
+    timeout: timeoutMs,
   })
   const byTable = new Map()
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -126,10 +126,10 @@ function createSchemaMonitor({ pool, locals, now = Date.now, log = console.log }
     return parts
   }
 
-  async function detect() {
+  async function detect(timeoutMs) {
     let d
     try {
-      d = await detectSchemaState(pool)
+      d = await detectSchemaState(pool, timeoutMs ? { timeoutMs } : undefined)
     } catch (err) {
       log(`[schema] No se pudo detectar el estado del esquema: ${err?.code || ''} ${err?.message || err}`.trim())
       const status = { ...UNKNOWN_STATUS }
@@ -146,15 +146,17 @@ function createSchemaMonitor({ pool, locals, now = Date.now, log = console.log }
     }
     const status = toStatus(d)
     if (locals) {
-      locals.labelSchema = d.labelSchema
-      locals.mastersAuditReady = d.mastersAuditReady
+      // Con la tabla ausente no se degradan los flags: así el INSERT/SELECT falla con ER_NO_SUCH_TABLE
+      // (visible y notificado) en vez de escribir etiquetas sin vínculo o maestros sin autor en silencio.
+      if (!d.missingTables.includes('labels')) locals.labelSchema = d.labelSchema
+      if (!AUDIT_TABLES.some((t) => d.missingTables.includes(t))) locals.mastersAuditReady = d.mastersAuditReady
       locals.schemaStatus = status
     }
     last = { at: now(), status, detected: d }
     return last
   }
 
-  async function refresh({ maxAgeMs = 0 } = {}) {
+  async function refresh({ maxAgeMs = 0, timeoutMs } = {}) {
     if (!pool) {
       const status = { ...UNKNOWN_STATUS }
       if (locals) locals.schemaStatus = status
@@ -162,29 +164,50 @@ function createSchemaMonitor({ pool, locals, now = Date.now, log = console.log }
     }
     if (inflight) return (await inflight).status
     if (last && now() - last.at < maxAgeMs) return last.status
-    inflight = detect().finally(() => {
+    inflight = detect(timeoutMs).finally(() => {
       inflight = null
     })
     return (await inflight).status
   }
 
-  async function onRouteError(err, routeName) {
+  /**
+   * `used` = flags que usó el intento fallido (capturados por la ruta antes de consultar). Si no se
+   * pasan, se toman al inicio de esta llamada. Devuelve true si los flags actuales difieren de los usados.
+   */
+  async function onRouteError(err, routeName, used) {
     if (!isSchemaError(err)) return false
     log(`[schema] ${routeName}: ${err.code} ${err.sqlMessage || err.message || ''}`.trim())
-    const before = {
-      audit: locals ? locals.mastersAuditReady : undefined,
-      labels: locals ? JSON.stringify(locals.labelSchema) : undefined,
+    if (!locals) {
+      await refresh({ maxAgeMs: ROUTE_RECHECK_MS })
+      return false
     }
-    const t0 = last?.at
+    const usedAudit = used && 'mastersAuditReady' in used ? used.mastersAuditReady : locals.mastersAuditReady
+    const usedLabels = JSON.stringify(used && 'labelSchema' in used ? used.labelSchema : locals.labelSchema)
     await refresh({ maxAgeMs: ROUTE_RECHECK_MS })
-    if (last?.at === t0 || !locals) return false
-    return before.audit !== locals.mastersAuditReady || before.labels !== JSON.stringify(locals.labelSchema)
+    return usedAudit !== locals.mastersAuditReady || usedLabels !== JSON.stringify(locals.labelSchema)
   }
 
   return { refresh, onRouteError }
 }
 
+/**
+ * Siembra el estado del arranque: mastersAuditReady viene de bootstrapSchema. Si la detección inicial
+ * falla (p. ej. timeout en un arranque lento) se reintenta con un timeout largo; si sigue fallando,
+ * labelSchema se asume completo (si falta una columna el INSERT falla con ER_BAD_FIELD_ERROR, visible,
+ * en vez de guardar etiquetas sin vínculo en silencio).
+ */
+async function primeSchema({ monitor, locals, mastersAuditReady, retries = 2, log = console.log }) {
+  locals.mastersAuditReady = Boolean(mastersAuditReady)
+  for (let i = 0; i <= retries; i++) {
+    const s = await monitor.refresh({ maxAgeMs: 0, timeoutMs: i === 0 ? undefined : 10_000 })
+    if (s.schemaComplete !== null) return
+  }
+  log('[schema] AVISO: no se pudo detectar el esquema al arrancar; se asume labels completa y se re-detecta ante errores.')
+  locals.labelSchema = buildLabelSchemaState(['season_id', 'company_id', 'season_cost_center_id'])
+}
+
 module.exports = {
+  primeSchema,
   BASE_TABLES,
   buildLabelSchemaState,
   detectSchemaState,
