@@ -11,8 +11,8 @@
 - [x] 1 Levantamiento — compuerta 1 aprobada por el usuario el 2026-10-02 ("Aprobar lo recomendado: exportar + arreglar importación"): P1..P11 con la opción recomendada.
 - [x] 2 Diseño — revisor: APROBADO CON CAMBIOS (3 IMP + 5 MEN, resueltos en iteración 2, §11). **Compuerta 2 aprobada por el usuario el 2026-10-02 ("Sí, aprobado").**
   - Decisiones del Lead (2026-10-02) sobre §10 del diseño: (1) 6 columnas (con NOMBRE CC) en plantilla, exportación y No importables; corregir CA-01/CA-06. (2) Celda NOMBRE CC vacía conserva el nombre. (3) Temporadas inactivas en el selector con " (inactiva)" + aviso. (4) CA-18 usa el proyecto `movil` (Pixel 7). (5) Renombrado por colisión de código → hallazgo fuera de alcance.
-- [ ] 3 Pruebas primero — unit en rojo (masterExcel, masterImport; validadas 110/110 contra referencia desechable). Lead acepta contratos: parseMasterWorkbook(XLSX.WorkBook) y nonImportableReasons exportada. E2E en cola tras la implementación del cambio esquema-login (BD compartida).
-- [ ] 4 Implementación
+- [x] 3 Pruebas primero — unit en rojo (2dbb96b); E2E UI/API 27 rojos + 2 invariantes verdes por proyecto; runner de volumen CA-19 rojo (500 por P5); regresión 122 ok + 8 skip.
+- [ ] 4 Implementación — en curso (rama actualizada con developer 111a692, que trae esquema-y-errores-login)
 - [ ] 5 Verificación local
 - [ ] 6 E2E completo
 - [ ] 7 Revisión
