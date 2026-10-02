@@ -2322,7 +2322,8 @@ html.scroll-lock .modal-root {
   gap: 1rem 1.2rem;
 }
 
-.label-form label {
+.label-form label,
+.master-excel .master-export-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2352,7 +2353,8 @@ html.scroll-lock .modal-root {
 .label-form input,
 .label-form select,
 .track-form input,
-.track-form select {
+.track-form select,
+.master-excel .master-export-field select {
   font: inherit;
   padding: 0.6rem 0.8rem;
   border-radius: var(--radius-sm);
@@ -2365,14 +2367,16 @@ html.scroll-lock .modal-root {
 .label-form input:hover,
 .label-form select:hover,
 .track-form input:hover,
-.track-form select:hover {
+.track-form select:hover,
+.master-excel .master-export-field select:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
 .label-form input:focus,
 .label-form select:focus,
 .track-form input:focus,
-.track-form select:focus {
+.track-form select:focus,
+.master-excel .master-export-field select:focus {
   outline: 2px solid var(--accent-ring);
   outline-offset: 1px;
   border-color: var(--accent);
