@@ -47,7 +47,8 @@
       "Bash(npm run server:prod)",
       "Bash(npm run server:prod *)",
       "Bash(node scripts/db-limpiar-operacion.mjs * --confirmar *)",
-      "Bash(npm run db:limpiar-operacion *)"
+      "Bash(npm run db:limpiar-operacion *)",
+      "Bash(node scripts/db-reset-clave.mjs *)"
     ]
   },
   "hooks": {
