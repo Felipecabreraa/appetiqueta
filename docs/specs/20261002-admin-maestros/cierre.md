@@ -49,4 +49,10 @@ Al arrancar el servidor, `ensureMastersAuditSchema` (`server/masterAudit.cjs`) a
 Solo de código: redeploy del commit anterior en Render o `git revert` del merge. El código anterior funciona con las columnas nuevas (son NULL y no se leen). No hace falta revertir el esquema.
 
 ## Publicación en staging
-(pendiente)
+- 2026-10-02: publicado en staging (2a2f458), CI verde, smoke 6/6. Staging recibió además una copia de producción; tras reiniciar el servicio, la migración agregó las columnas de auditoría.
+
+
+## Aprobación para producción
+- **Fecha y hora:** 2026-10-02 20:44 (America/Santiago)
+- **Frase textual del usuario:** "Sí, apruebo publicar en producción" (respuesta a "¿Apruebas publicar en producción estos 4 cambios?", tras ver el paquete: admin-maestros, exportar-maestros-excel, esquema-y-errores-login y ui-carga-excel, con migración, rollback y comprobaciones previas).
+- **Comprobaciones previas pedidas al usuario (BD de producción, solo lectura):** `SHOW GRANTS FOR CURRENT_USER();` (ALTER/REFERENCES) y conteo de relaciones con variedad de otra especie.
