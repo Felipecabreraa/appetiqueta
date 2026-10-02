@@ -159,6 +159,16 @@ Las tareas de dev-backend y dev-frontend **no comparten archivos**. Las pruebas 
 
 Contrato entre T-01 y T-02 (para paralelizarlas): `schemaState.cjs` exporta `BASE_TABLES: readonly string[]`, `buildLabelSchemaState`, `detectSchemaState`, `isSchemaError` y `createSchemaMonitor`. `schemaBootstrap.cjs` exporta `parseBaseTables`, `ensureBaseTables`, `ensureBaseData`, `ensureMovementsSchema` y `bootstrapSchema`.
 
+### Contrato de pruebas (fijado por qa-unitario en la fase 3; el dev debe respetarlo)
+- `parseBaseTables(sqlText) -> [{ name, sql }]`. Lanza si una sentencia aceptada contiene `DROP|TRUNCATE|DELETE|RENAME|ALTER` fuera de un literal (`'...'`). Descarta (sin lanzar) `SET`, `INSERT`, `DROP` sueltos y `CREATE TABLE` sin `IF NOT EXISTS`. `sql` no incluye comentarios `--` ni `SET`/`INSERT`.
+- `ensureBaseTables(pool, { log, schemaPath? }) -> { created: string[], failed: [{ table, code }] }`. `log` es `(line: string) => void`; sin `schemaPath` lee `database/schema.sql`. Detecta lo existente con una consulta a `information_schema.TABLES` (nombres comparados en minúsculas), ejecuta un `CREATE` por tabla faltante vía `pool.query(sql)` (también se acepta `execute`), en el orden del archivo. Nunca lanza: un archivo ilegible deja `created=[]` y una línea `[schema] ERROR ... schema.sql ...` en `log`. Formato del log: `[schema] Tabla creada: <t>` y `[schema] ERROR al crear la tabla <t> (<code>): <message>`.
+- `bootstrapSchema(pool, { log }) -> { created, failed }`; nunca lanza. Orden: tablas, `INSERT IGNORE` de la época, upsert de roles, superadmin, `ensureMovementsSchema`, `ensureMastersAuditSchema`; cada paso de `ensureBaseData` está aislado.
+- `detectSchemaState(pool) -> { missingTables, mastersAuditReady, movementsSchemaReady, labelSchema, schemaComplete }` con una sola consulta (`pool.query` o `execute`) a `information_schema.COLUMNS` que devuelve filas `{ TABLE_NAME, COLUMN_NAME }`. Rechaza si la consulta falla.
+- `createSchemaMonitor({ pool, locals, now, log })` -> `{ refresh({ maxAgeMs }), onRouteError(err, routeName) }`. `refresh` devuelve `{ schemaComplete, missingTables, mastersAuditReady, movementsSchemaReady }` (los 4 en `null` si no hay pool o la detección falla; nunca lanza) y escribe `locals.schemaStatus`, `locals.mastersAuditReady` y `locals.labelSchema`. `onRouteError` devuelve `Promise<boolean>` (true si cambió `mastersAuditReady`). La antigüedad se compara con `age < maxAgeMs` (refresca si `age >= maxAgeMs`).
+- `isSchemaError(err) -> boolean`.
+- `tests/e2e/helpers/healthCheck.ts` exporta `evaluateHealth(body: unknown) -> { ok: boolean, motivo?: string }`. El motivo nombra las tablas, "la BD no está lista", la auditoría de maestros o "no informa el estado del esquema" según el caso.
+- `src/lib/authApi.ts` exporta `loginErrorMessage(kind: number | 'network')`.
+
 ## 8. Plan de pruebas
 
 Los E2E de API de arranque usan `scripts/e2e-esquema-arranque.mjs`, que sigue el patrón probado de `scripts/e2e-migracion-maestros.mjs`: guardián `loadTestEnv`, reset, `spawn` del servidor con stdout capturado, espera de health, apagado y espera del puerto libre, y reset al terminar. La referencia de la "definición de schema.sql" es el `SHOW CREATE TABLE` de cada tabla tomado justo después de `resetTestDb` (normalizando `AUTO_INCREMENT=n`). Corre en MariaDB 10.6 en CI y en MySQL 8/9 en local.

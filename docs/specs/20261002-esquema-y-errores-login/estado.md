@@ -13,8 +13,8 @@
 - [x] 0 Triage y rama
 - [x] 1 Levantamiento — compuerta 1 aprobada por el usuario el 2026-10-02 ("Sí, aprobado con las recomendadas"): P1 health 200 + campos de esquema; P2 (b) re-detección sin DDL, degradar; P3 tablas + flags de migraciones; P4 "No fue posible iniciar sesión."; P5 guía prod→staging en docs/AMBIENTES.md
 - [x] 2 Diseño — compuerta 2 aprobada por el usuario el 2026-10-02 ("Sí, aprobado")
-- [ ] 3 Pruebas primero — en curso
-- [ ] 4 Implementación
+- [x] 3 Pruebas primero — unit: 4 suites rojas por la razón correcta; E2E UI 30 rojos (nuevos), API: e2e-esquema-arranque 17 rojos; existentes en verde. CA-05 no ejecutable en local (faltan MYSQL_ADMIN_* en .env.test), sí en CI.
+- [ ] 4 Implementación — en curso
 - [ ] 5 Verificación local
 - [ ] 6 E2E completo
 - [ ] 7 Revisión
