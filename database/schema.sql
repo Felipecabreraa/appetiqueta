@@ -291,6 +291,14 @@ CREATE TABLE IF NOT EXISTS batch_log_labels (
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Metadatos de la aplicación (p. ej. operational_epoch: cambia al vaciar los datos operativos).
+CREATE TABLE IF NOT EXISTS app_meta (
+  meta_key VARCHAR(64) NOT NULL,
+  meta_value VARCHAR(255) NOT NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (meta_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Datos base de roles
 INSERT INTO roles (code, name, description)
 VALUES

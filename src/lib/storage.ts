@@ -2,6 +2,7 @@ import type { LabelRecord, Movement, MovementType } from '../types'
 
 export const LABELS_STORAGE_KEY = 'appetiquetado:labels'
 export const MOVEMENTS_STORAGE_KEY = 'appetiquetado:movements'
+export const BATCHES_STORAGE_KEY = 'appetiquetado:batches'
 
 const LABELS_KEY = LABELS_STORAGE_KEY
 const MOVEMENTS_KEY = MOVEMENTS_STORAGE_KEY
@@ -46,6 +47,13 @@ function normalizeMovements(list: Movement[]): Movement[] {
     writeJson(MOVEMENTS_KEY, next)
   }
   return next
+}
+
+/** Borra la copia local de etiquetas, lecturas e historial de lotes (el servidor sigue siendo la fuente de verdad). */
+export function clearLocalOperationalData(): void {
+  writeJson(LABELS_KEY, [])
+  writeJson(MOVEMENTS_KEY, [])
+  writeJson(BATCHES_STORAGE_KEY, [])
 }
 
 export function getLabels(): LabelRecord[] {

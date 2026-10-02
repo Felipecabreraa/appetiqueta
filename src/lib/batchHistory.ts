@@ -1,7 +1,7 @@
 import type { LabelRecord } from '../types'
-import { getLabelById } from './storage'
+import { BATCHES_STORAGE_KEY, getLabelById } from './storage'
 
-const BATCH_KEY = 'appetiquetado:batches'
+const BATCH_KEY = BATCHES_STORAGE_KEY
 const MAX_ENTRIES = 40
 
 export interface BatchLogEntry {
