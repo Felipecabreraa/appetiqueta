@@ -5,8 +5,6 @@ function baseUrl(): string {
   return raw ? raw.replace(/\/$/, '') : ''
 }
 
-const API_TIMEOUT_MS = 20_000
-
 export async function apiFetch(
   path: string,
   options: RequestInit = {},
@@ -18,11 +16,8 @@ export async function apiFetch(
   headers.set('Accept', 'application/json')
   const token = getSessionToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  // Con mala señal un fetch puede quedar colgado minutos: se corta a los 20 s y se informa.
-  const signal = options.signal ?? AbortSignal.timeout(API_TIMEOUT_MS)
   return fetch(`${baseUrl()}${path}`, {
     ...options,
     headers,
-    signal,
   })
 }

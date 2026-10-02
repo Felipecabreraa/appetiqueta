@@ -264,7 +264,11 @@ export function TrackingView({ initialCode = '', canExportExcel = false }: Props
       jcFirstRead ? { jcFirstRead } : undefined,
     )
     if (pushed.ok === false) {
-      setMsg(pushed.error)
+      setMsg(
+        pushed.code === 'network'
+          ? 'No se pudo confirmar con el servidor. Vuelva a cargar el código para ver si la lectura quedó registrada antes de repetirla.'
+          : pushed.error,
+      )
       setMsgTone('err')
       // Otro dispositivo registró antes: refrescar el estado real de la etiqueta.
       if (pushed.code && STALE_STATE_CODES.has(pushed.code)) {

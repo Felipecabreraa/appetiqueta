@@ -2,8 +2,8 @@
  * Límite de peticiones por IP en ventana fija (en memoria, por instancia).
  * Suficiente para una instancia de Render; protege endpoints públicos de terreno y el login.
  *
- * Con `countIf(res)` solo se cuentan las respuestas que cumplen la condición (p. ej. login fallido),
- * evaluadas al terminar la respuesta; el bloqueo se aplica al siguiente intento.
+ * Con `countIf(res)` solo quedan contadas las respuestas que cumplen la condición (p. ej. login fallido);
+ * mientras una petición está en curso cuenta como intento, para que una ráfaga paralela no pase.
  */
 function createRateLimiter({ windowMs, max, now = Date.now, countIf }) {
   if (!Number.isFinite(max) || max <= 0) {
@@ -35,16 +35,19 @@ function createRateLimiter({ windowMs, max, now = Date.now, countIf }) {
       return res.status(429).json({ ok: false, error: 'rate_limited' })
     }
 
-    if (countIf) {
-      if (entry.count >= max) return block()
-      res.on('finish', () => {
-        if (countIf(res)) entryFor(key, now()).count += 1
-      })
-      return next()
-    }
-
+    // Se cuenta al entrar (una ráfaga en paralelo no puede saltarse el límite) y, con countIf,
+    // se descuenta al terminar si la respuesta no debía contar (p. ej. login exitoso).
     entry.count += 1
-    if (entry.count > max) return block()
+    if (entry.count > max) {
+      entry.count -= 1
+      return block()
+    }
+    if (countIf) {
+      const counted = entry
+      res.on('finish', () => {
+        if (!countIf(res) && counted.count > 0) counted.count -= 1
+      })
+    }
     next()
   }
 }

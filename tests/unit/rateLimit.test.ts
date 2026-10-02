@@ -84,6 +84,19 @@ describe('rate limiter', () => {
     expect(blocked.r.code).toBe(429)
   })
 
+  it('CA-02 (R1): con countIf, una ráfaga en paralelo no se salta el límite', () => {
+    const mw = createRateLimiter({ windowMs: 60_000, max: 3, countIf: (res) => res.statusCode === 401 })
+    let passed = 0
+    // 50 intentos simultáneos: ninguno ha terminado cuando llegan los siguientes
+    const pendientes = Array.from({ length: 50 }, () => {
+      const f = fakeRes(401)
+      mw({ ip: '4.4.4.4' }, f.res, () => passed++)
+      return f
+    })
+    expect(passed).toBe(3)
+    pendientes.forEach((f) => f.finish())
+  })
+
   it('max <= 0 desactiva el límite', () => {
     const mw = createRateLimiter({ windowMs: 60_000, max: 0 })
     let passed = 0

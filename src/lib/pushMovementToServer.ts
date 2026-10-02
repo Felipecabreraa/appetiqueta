@@ -1,5 +1,6 @@
 import type { Movement } from '../types'
 import { apiFetch } from './apiClient'
+import { FIELD_TIMEOUT_MS, timeoutSignal } from './timeout'
 
 export type PushMovementOptions = {
   /** Obligatorio en el servidor cuando el JC es el primero para esa etiqueta (cantidad_totes aún NULL en BD). */
@@ -14,7 +15,7 @@ export const STALE_STATE_CODES = new Set(['jc_already_registered', 'already_comp
 function mapMovementError(code: string, http: number): string {
   switch (code) {
     case 'invalid_movement':
-      return 'Datos de movimiento inválidos.'
+      return 'Datos inválidos: use números enteros (totes entre 1 y 100.000 en JC; precio y JH sin decimales).'
     case 'label_not_found':
       return 'La etiqueta no existe en el servidor. Debe cargarse desde oficina antes de registrar lecturas.'
     case 'jc_data_required':
@@ -58,6 +59,7 @@ export async function pushMovementToServer(
     const res = await apiFetch('/api/movements', {
       method: 'POST',
       body: JSON.stringify(body),
+      signal: timeoutSignal(FIELD_TIMEOUT_MS),
     })
     if (res.ok) {
       return { ok: true }

@@ -12,6 +12,7 @@ import type {
   SeasonOption,
 } from '../types'
 import { apiFetch } from './apiClient'
+import { FIELD_TIMEOUT_MS, timeoutSignal } from './timeout'
 
 export interface CatalogResponse {
   seasonId: number | null
@@ -171,7 +172,7 @@ export async function upsertVariety(payload: {
 }
 
 export async function fetchJcForemen(): Promise<JcForemanOption[]> {
-  const res = await apiFetch('/api/master-data/jc-foremen')
+  const res = await apiFetch('/api/master-data/jc-foremen', { signal: timeoutSignal(FIELD_TIMEOUT_MS) })
   const data = await parseOrThrow<{ foremen?: JcForemanOption[] }>(res)
   return data.foremen || []
 }

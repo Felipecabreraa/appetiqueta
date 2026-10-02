@@ -39,3 +39,13 @@
 | Escritorio: primer JC con precio y JH, luego acopio | registro-escritorio.spec.ts | ✅ desktop + móvil |
 | Carga: 300 etiquetas, 16 lecturas concurrentes | test:e2e:api | ✅ 43/43 |
 | Regresión | verify (33 unit) · build · Playwright 42/42 · E2E API 43/43 | ✅ |
+
+## Segunda revisión (commit b705fe7): 3 regresiones corregidas
+| Hallazgo | Corrección | Prueba |
+|---|---|---|
+| R1 El login con countIf se podía saltar con una ráfaga en paralelo | Se cuenta al entrar y se descuenta al terminar si no fue fallo | `rateLimit.test.ts`: 50 intentos simultáneos → pasan 3 |
+| R2 El timeout global de 20 s cortaba la importación y la exportación | Timeout solo en llamadas de terreno; el resto sin límite | revisión + regresión E2E (maestros Excel, Excel de trackeo) |
+| R3 `AbortSignal.timeout` no existe en iOS < 16 | Helper `timeoutSignal` con respaldo | `timeout.test.ts` |
+| I7 El arranque en frío de Free superaba 20 s | Timeout de terreno de 60 s | — |
+| N1 Etiqueta borrada en el servidor pero en caché | Se muestra "no encontrada" (manda el servidor) | revisión |
+| N3/N4/N6 | Mensaje de datos inválidos específico; mensaje de red propio en escritorio; indentación | revisión |

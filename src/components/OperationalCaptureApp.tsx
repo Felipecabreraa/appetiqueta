@@ -57,7 +57,8 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
         setRev((x) => x + 1)
         return
       }
-      if (r.error === 'not_found' && !after) {
+      if (r.error === 'not_found') {
+        // El servidor es la fuente de verdad: si allá no existe, no se ofrece el formulario aunque esté en caché.
         setRemoteState({ labelId: id, status: 'done_miss' })
         return
       }
@@ -97,7 +98,7 @@ export function OperationalCaptureApp({ labelId }: { labelId: string }) {
     return <OperationalLoading message="Sincronizando con el servidor…" />
   }
 
-  if (!label || phase === 'not_found') {
+  if (!label || phase === 'not_found' || remote === 'done_miss') {
     if (remote === 'done_err') {
       return <OperationalNotFound code={id} reason="network" />
     }

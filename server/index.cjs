@@ -916,7 +916,7 @@ async function main() {
       if (rows.length > 10000) return res.status(400).json({ ok: false, error: 'rows_too_large' })
 
       const conn = await getConnectionOr503(pool, res)
-    if (!conn) return
+      if (!conn) return
       try {
         await conn.beginTransaction()
         const seasonId = await resolveSeason(conn, req.body?.season || {})
@@ -1009,7 +1009,7 @@ async function main() {
       const isCurrent = toBit(req.body?.isCurrent, 0)
       const isActive = toBit(req.body?.isActive, 1)
       const conn = await getConnectionOr503(pool, res)
-    if (!conn) return
+      if (!conn) return
       try {
         await conn.beginTransaction()
         if (id) {
