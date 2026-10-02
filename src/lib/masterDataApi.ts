@@ -68,19 +68,24 @@ export async function importMasterRows(payload: {
   }
 }
 
-async function parseOrThrow<T>(res: Response): Promise<T> {
+async function parseOrThrow<T>(res: Response, opts: { serverText?: boolean } = {}): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) {
-    throw new Error(describeApiError((data as { error?: string }).error, res.status))
+    throw new Error(describeApiError((data as { error?: string }).error, res.status, opts.serverText ?? true))
   }
   return data
 }
 
-function describeApiError(code: string | undefined, status: number): string {
+const SERVER_DB_CODES = ['db', 'db_unavailable', 'db_not_configured']
+const SERVER_TEXT =
+  'Problema del servidor o de la base de datos al cargar o guardar Maestros. Intente de nuevo en unos segundos; si continúa, avise al administrador.'
+
+function describeApiError(code: string | undefined, status: number, serverText = true): string {
   if (code === 'invalid_payload') {
     return 'Datos inválidos: revise código, nombre y fechas (AAAA-MM-DD).'
   }
   if (code === 'forbidden') return 'No tiene permisos para esta acción.'
+  if (serverText && (status >= 500 || (code && SERVER_DB_CODES.includes(code)))) return SERVER_TEXT
   return code || `HTTP ${status}`
 }
 
@@ -181,7 +186,7 @@ export async function upsertVariety(payload: {
 
 export async function fetchJcForemen(): Promise<JcForemanOption[]> {
   const res = await apiFetch('/api/master-data/jc-foremen', { signal: timeoutSignal(FIELD_TIMEOUT_MS) })
-  const data = await parseOrThrow<{ foremen?: JcForemanOption[] }>(res)
+  const data = await parseOrThrow<{ foremen?: JcForemanOption[] }>(res, { serverText: false })
   return data.foremen || []
 }
 

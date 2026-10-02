@@ -376,7 +376,9 @@ export function MastersAdminPanel({ canManage }: { canManage: boolean }) {
   )
   const listEmptyHint = loading
     ? 'Cargando registros…'
-    : emptyHint(query, statusFilter, counts[catalog], catalog === 'relations' && seasonFilter > 0)
+    : error && counts[catalog] === 0
+      ? 'No se pudieron cargar los registros.'
+      : emptyHint(query, statusFilter, counts[catalog], catalog === 'relations' && seasonFilter > 0)
 
   return (
     <section className="masters-admin">
