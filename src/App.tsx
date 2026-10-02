@@ -101,7 +101,7 @@ function App() {
   const allowedTabs = useMemo(() => (role ? getAllowedTabs(role) : []), [role])
   const canUseGenerator = role ? canAccessTab(role, 'generar') : false
   const canDownloadTrackingExcel = role ? canExportTrackingExcel(role) : false
-  const canManageMasters = role === 'superadmin'
+  const canManageMasters = role ? canAccessTab(role, 'maestros') : false
 
   useEffect(() => {
     if (!navOpen) return

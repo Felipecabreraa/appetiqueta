@@ -49,7 +49,20 @@ export interface CostCenterOption {
   csg: string
 }
 
-export interface MasterSeason {
+export interface MasterAuditUser {
+  id: number
+  name: string
+}
+
+/** Auditoría por registro: autores en null si son históricos, importados o de usuario eliminado. */
+export interface MasterAudit {
+  createdBy?: MasterAuditUser | null
+  updatedBy?: MasterAuditUser | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface MasterSeason extends MasterAudit {
   id: number
   code: string
   name: string
@@ -59,35 +72,35 @@ export interface MasterSeason {
   is_active: number
 }
 
-export interface MasterCompany {
+export interface MasterCompany extends MasterAudit {
   id: number
   code: string
   name: string
   is_active: number
 }
 
-export interface MasterSpecies {
+export interface MasterSpecies extends MasterAudit {
   id: number
   code: string
   name: string
   is_active: number
 }
 
-export interface MasterCsg {
+export interface MasterCsg extends MasterAudit {
   id: number
   code: string
   name: string
   is_active: number
 }
 
-export interface MasterJcForeman {
+export interface MasterJcForeman extends MasterAudit {
   id: number
   code: string
   name: string
   is_active: number
 }
 
-export interface MasterVariety {
+export interface MasterVariety extends MasterAudit {
   id: number
   code: string
   name: string
@@ -96,7 +109,7 @@ export interface MasterVariety {
   is_active: number
 }
 
-export interface MasterRelation {
+export interface MasterRelation extends MasterAudit {
   id: number
   season_id: number
   season_code?: string

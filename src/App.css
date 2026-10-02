@@ -3819,3 +3819,11 @@ html.scroll-lock .modal-root {
     box-shadow: none;
   }
 }
+
+.masters-audit {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: normal;
+}
