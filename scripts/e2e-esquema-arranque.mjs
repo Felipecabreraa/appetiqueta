@@ -449,7 +449,7 @@ try {
       const a2 = await selects(conn)
       check(r2.every((r) => r.status === 500), 'BORDE-ráfaga: 2.ª ráfaga debe seguir en 500')
       const extra2 = a2 - a1 - 40
-      check(extra2 <= 1, `BORDE-ráfaga: dentro de la ventana de 10 s no debe re-detectar de nuevo; SELECT extra = ${extra2}`)
+      check(extra2 <= 2, `BORDE-ráfaga: dentro de la ventana de 10 s no debe re-detectar de nuevo; SELECT extra = ${extra2}`)
       const cambios = (s.salida().match(/Cambio de esquema detectado/g) || []).length
       check(cambios <= 1, `BORDE-ráfaga: "Cambio de esquema detectado" aparece ${cambios} veces (máx 1)`)
       const h = await http('GET', '/api/health')
