@@ -26,6 +26,7 @@
 - Vuelta 2 (revisor): APROBADO.
 
 ## Hallazgos fuera de alcance
+- 2026-10-02 (post-staging): `BORDE-ráfaga` de scripts/e2e-esquema-arranque.mjs falló en el CI de developer (8ab466c, intento 1) y de main (8ab466c); bloqueó producción (Render no desplegó). Causa raíz: la detección del arranque quedaba vigente 10 s (ROUTE_RECHECK_MS) y la re-detección caía en la 2.ª ráfaga; además medía con Com_select global y el health se leía una sola vez. Corregido en fix/prueba-borde-rafaga (5fff418): espera de 10,5 s, señal por log del servidor, health con sondeo, aserción de la 2.ª ráfaga solo si cabe en la ventana (si no, AVISO). 10/10 en local.
 - (revisor, menor) `server/index.cjs:607`: si al arrancar la detección funciona pero falta `labels`, `labelSchema` queda todo en false; si luego se crea `labels` a mano con el servicio encendido y nadie consulta health, el primer batch inserta sin vínculo. Corrección de una línea: iniciar `app.locals.labelSchema` con las 3 columnas.
 - Inestable: `tests/e2e/multiusuario.spec.ts:110` (carrera de JC entre 2 celulares) falló 1 vez en la suite completa; aislado 55/55. Posible relación con el deadlock conocido de POST /api/movements. Investigar en otro ciclo.
 - (diseño) `OperationalJcForm.tsx`/`TrackingView.tsx` muestran el código crudo `db` si falla `/api/master-data/jc-foremen`; la importación Excel tampoco pasa por `describeApiError`.
