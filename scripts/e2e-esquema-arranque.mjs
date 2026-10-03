@@ -434,26 +434,43 @@ try {
   const rafaga = (n, fn) => Promise.all(Array.from({ length: n }, fn))
 
   await escenario('BORDE: 40 logins concurrentes con ER_NO_SUCH_TABLE → una sola re-detección por ventana', async (conn) => {
+    // Causa de la inestabilidad anterior: tras arrancar, el sondeo de /api/health (y primeSchema) deja una detección
+    // reciente en el monitor; la ventana de 10 s de onRouteError se medía desde ahí, así que la 1.ª ráfaga no re-detectaba
+    // (devolvía el estado cacheado) y la re-detección caía dentro de la 2.ª, y además health (caché de 2 s) devolvía
+    // el estado previo al DROP. Además Com_select es global y ruidoso. Ahora: (1) se deja vencer la ventana antes del
+    // DROP, (2) la señal es el log "Cambio de esquema detectado" (solo se emite si el estado cambia: se cambia el
+    // esquema otra vez entre ráfagas, así una re-detección indebida deja huella exacta), (3) health se sondea con plazo.
     const op = await crearOperador(conn)
     const s = await arrancar()
     try {
+      await dormir(10_500) // vence la ventana de 10 s (ROUTE_RECHECK_MS) de la última detección del arranque
       await conn.query('DROP TABLE auth_sessions')
-      // Línea base: SELECT por login (1) sin re-detección = 40. Sin deduplicar serían ~80 (cada ruta detectaría).
-      const a0 = await selects(conn)
+      const t0 = Date.now()
       const r1 = await rafaga(40, () => login(op.username, op.password))
-      const a1 = await selects(conn)
       check(r1.every((r) => r.status === 500), `BORDE-ráfaga: se esperaban 40 × 500, fue ${[...new Set(r1.map((r) => r.status))]}`)
-      const extra1 = a1 - a0 - 40
-      check(extra1 <= 3, `BORDE-ráfaga: SELECT extra de re-detección en la 1.ª ráfaga = ${extra1} (máx 3 esperado: una detección)`)
+      const cambios1 = (s.salida().match(/Cambio de esquema detectado[^\n]*faltan tablas \[auth_sessions\]/g) || []).length
+      check(cambios1 === 1, `BORDE-ráfaga: la 1.ª ráfaga debe re-detectar exactamente una vez (log "Cambio de esquema detectado" = ${cambios1})`)
+      // Cambio de esquema nuevo: si la 2.ª ráfaga re-detectara dentro de la ventana, lo registraría en el log.
+      await conn.query('DROP TABLE batch_log_labels')
       const r2 = await rafaga(40, () => login(op.username, op.password))
-      const a2 = await selects(conn)
+      const dentro = Date.now() - t0 < 9_000 // margen bajo los 10 s de la ventana; en un CI muy lento no se puede afirmar
       check(r2.every((r) => r.status === 500), 'BORDE-ráfaga: 2.ª ráfaga debe seguir en 500')
-      const extra2 = a2 - a1 - 40
-      check(extra2 <= 1, `BORDE-ráfaga: dentro de la ventana de 10 s no debe re-detectar de nuevo; SELECT extra = ${extra2}`)
-      const cambios = (s.salida().match(/Cambio de esquema detectado/g) || []).length
-      check(cambios <= 1, `BORDE-ráfaga: "Cambio de esquema detectado" aparece ${cambios} veces (máx 1)`)
-      const h = await http('GET', '/api/health')
-      check(h.body.schemaComplete === false && JSON.stringify(h.body.missingTables) === '["auth_sessions"]', `BORDE-ráfaga: health debe listar auth_sessions, fue ${JSON.stringify(h.body)}`)
+      if (dentro) {
+        check(!s.salida().includes('batch_log_labels'), 'BORDE-ráfaga: dentro de la ventana de 10 s no debe re-detectar de nuevo (el log ya nombra batch_log_labels)')
+      } else {
+        console.warn(`  AVISO: las ráfagas tardaron ${Date.now() - t0} ms (> 9 s): no se afirma la ausencia de re-detección en la 2.ª`)
+      }
+      // health (caché de 2 s) debe converger a listar las tablas faltantes: sondeo con plazo, no lectura única.
+      const limite = Date.now() + 15_000
+      let h
+      let ok = false
+      while (Date.now() < limite) {
+        h = await http('GET', '/api/health')
+        const m = h.body.missingTables
+        if (h.body.schemaComplete === false && Array.isArray(m) && m.includes('auth_sessions') && (!dentro || m.includes('batch_log_labels'))) { ok = true; break }
+        await dormir(300)
+      }
+      check(ok, `BORDE-ráfaga: en 15 s health debe listar auth_sessions (y batch_log_labels), fue ${JSON.stringify(h?.body)}`)
     } finally {
       await s.stop()
     }
